@@ -21,6 +21,9 @@
 static int verbose = 1;
 static char state_file[512];
 
+#define PACMAN_UPDATER_SUDO                                                    \
+	"/usr/lib/pacman-updater/pacman-updater-pacman-wrapper"
+
 static void logmsg(int level, const char *fmt, ...)
 {
 	if (level > verbose)
@@ -713,6 +716,8 @@ static int run_update(config_t *c, state_t *s)
 	char par[32], *ya[8];
 	int j = 0;
 	ya[j++] = (char *)yay;
+	ya[j++] = "--sudo";
+	ya[j++] = (char *)PACMAN_UPDATER_SUDO;
 	/* Repository packages were already updated by the root pacman stage. */
 	ya[j++] = "-Sua";
 	ya[j++] = "--noconfirm";

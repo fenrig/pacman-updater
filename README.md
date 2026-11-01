@@ -114,9 +114,11 @@ and working directory. The root `pacman -Syu` stage updates repository
 packages; the user stage runs `yay -Sua --noconfirm` and updates AUR packages
 only. `tools/pacman-updater-pacman-wrapper` is a supplied root-owned,
 fixed-path helper that permits only `pacman -U` of absolute regular package
-files. Set yay’s `sudo_bin` to it and allow only that exact executable for
-`aur_user` in sudoers (with `NOPASSWD` if unattended operation is wanted); do
-not grant `NOPASSWD: ALL`. The worker supplies `/dev/null` as stdin and
+files. Allow only that exact executable for `aur_user` in sudoers (with
+`NOPASSWD` if unattended operation is wanted); the
+worker passes this wrapper to yay explicitly, so no per-user yay `sudo_bin`
+configuration is required. Do not grant `NOPASSWD: ALL`. The worker supplies
+`/dev/null` as stdin and
 `--noconfirm`, so a password or other interaction fails instead of waiting for
 a hidden prompt. Verify yay’s effective `sudo`, `sudoflags`, and `makepkgconf`
 settings before enabling the timer.
