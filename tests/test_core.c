@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include "core.h"
 #include <assert.h>
 #include <stdio.h>
