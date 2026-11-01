@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily automatic Arch package update activation
+
+[Timer]
+OnCalendar=*-*-* 00:00:00
+Persistent=true
+Unit=pacman-updater.service
+
+[Install]
+WantedBy=timers.target

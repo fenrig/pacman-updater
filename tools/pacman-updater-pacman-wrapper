@@ -1,0 +1,14 @@
+#!/bin/sh
+# Install root-owned (0755) and set yay's sudo_bin to this path. The sudo
+# rule should allow only this exact executable for aur_user.
+set -efu
+[ "$#" -ge 2 ] && [ "$1" = -U ] || { echo 'pacman-updater: only pacman -U is permitted' >&2; exit 64; }
+shift
+for pkg do
+    case "$pkg" in
+        --*) echo 'pacman-updater: options are not permitted after -U' >&2; exit 64;;
+        /*) [ -f "$pkg" ] || { echo "pacman-updater: package is not a regular file: $pkg" >&2; exit 66; };;
+        *) echo 'pacman-updater: package path must be absolute' >&2; exit 64;;
+    esac
+done
+exec /usr/bin/pacman -U --noconfirm "$@"

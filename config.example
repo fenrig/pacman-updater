@@ -1,0 +1,25 @@
+# /etc/pacman-updater.conf (root-owned, mode 0644; one key=value per line)
+update_interval=7d
+poll_interval=5m
+idle_mode=user
+idle_required=30m
+cpu_window=5m
+no_user_uptime=15m
+cpu_threshold=10
+battery_external=25
+battery_charging=25
+battery_discharging=90
+# Required: an existing unprivileged account that owns the yay build cache.
+aur_user=aurbuild
+# 0 means preserve the account's existing makepkg.conf. Otherwise yay receives --mflags -jN.
+parallelism=0
+verbosity=1
+endpoint=https://connectivitycheck.gstatic.com/generate_204
+# Tried only if the primary endpoint fails. Set empty to disable the fallback.
+fallback_endpoint=https://www.google.com/generate_204
+connect_timeout=10s
+# Optional public repository containing private-to-you PKGBUILDs.
+custom_repo_url=
+custom_repo_ref=main
+timer_calendar=*-*-* 00:00:00
+state_dir=/var/lib/pacman-updater

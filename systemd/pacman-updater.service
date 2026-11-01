@@ -1,0 +1,16 @@
+[Unit]
+Description=Automatic Arch package update worker
+After=network-online.target systemd-logind.service
+Wants=network-online.target
+ConditionPathExists=/etc/pacman-updater.conf
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/pacman-updater --config /etc/pacman-updater.conf
+User=root
+Group=root
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=no
+
