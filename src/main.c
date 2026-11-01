@@ -172,17 +172,34 @@ static int run_capture(const char *path,
 	return 128 + WTERMSIG(status);
 }
 
-static int package_is_installed(const char *installed, const char *package)
+static int installed_version(const char *installed,
+			     const char *package,
+			     char *version,
+			     size_t version_size)
 {
 	const char *line = installed;
 	size_t length = strlen(package);
 
 	while (*line) {
 		const char *end = strchr(line, '\n');
+		const char *separator = strchr(line, ' ');
 		size_t line_length = end ? (size_t)(end - line) : strlen(line);
 
-		if (line_length == length && !strncmp(line, package, length))
+		if (separator && (size_t)(separator - line) == length
+		    && !strncmp(line, package, length)) {
+			const char *value = separator;
+			size_t value_length;
+
+			while (*value == ' ' || *value == '\t')
+				value++;
+			value_length =
+			    end ? (size_t)(end - value) : strlen(value);
+			if (!value_length || value_length >= version_size)
+				return 0;
+			memcpy(version, value, value_length);
+			version[value_length] = '\0';
 			return 1;
+		}
 		line = end ? end + 1 : line + line_length;
 	}
 	return 0;
@@ -197,28 +214,133 @@ struct custom_build_context {
 
 static struct custom_build_context *active_custom_context;
 
-static int source_info_matches(const char *source_info, const char *installed)
+static int source_info_value(const char *line,
+			     const char *key,
+			     char *value,
+			     size_t value_size)
+{
+	size_t key_length = strlen(key);
+	size_t value_length;
+
+	while (*line == ' ' || *line == '\t')
+		line++;
+	if (strncmp(line, key, key_length) || line[key_length] != ' '
+	    || line[key_length + 1] != '=')
+		return 0;
+	line += key_length + 2;
+	while (*line == ' ' || *line == '\t')
+		line++;
+	value_length = strlen(line);
+	while (value_length
+	       && (line[value_length - 1] == '\n'
+		   || line[value_length - 1] == '\r'))
+		value_length--;
+	if (!value_length || value_length >= value_size)
+		return 0;
+	memcpy(value, line, value_length);
+	value[value_length] = '\0';
+	return 1;
+}
+
+static int arch_version_newer(const config_t *config,
+			      const char *available,
+			      const char *installed)
+{
+	char result[32];
+	char *args[] = {"vercmp", (char *)available, (char *)installed, NULL};
+	char *end;
+	long comparison;
+
+	if (run_capture(
+		"vercmp", args, config, 0, NULL, result, sizeof(result)))
+		return -1;
+	errno = 0;
+	comparison = strtol(result, &end, 10);
+	if (errno || end == result)
+		return -1;
+	return comparison > 0;
+}
+
+static int source_info_has_update(const char *source_info,
+				  const char *installed,
+				  const config_t *config)
 {
 	const char *line = source_info;
+	char epoch[64] = "";
+	char pkgver[256] = "";
+	char pkgrel[64] = "";
+	int found_update = 0;
 
 	while (*line) {
 		const char *end = strchr(line, '\n');
 		char package[256];
-		size_t length;
+		char installed_value[256];
+		char available[384];
+		char line_value[256];
+		char value[256];
+		size_t length = end ? (size_t)(end - line) : strlen(line);
 
-		if (!strncmp(line, "pkgname = ", 10)) {
-			line += 10;
-			length = end ? (size_t)(end - line) : strlen(line);
-			if (length >= sizeof(package))
-				return 0;
-			memcpy(package, line, length);
-			package[length] = '\0';
-			if (package_is_installed(installed, package))
-				return 1;
+		if (length >= sizeof(line_value))
+			return -1;
+		memcpy(line_value, line, length);
+		line_value[length] = '\0';
+		if (source_info_value(
+			line_value, "epoch", value, sizeof(value))) {
+			if (strlen(value) >= sizeof(epoch))
+				return -1;
+			strcpy(epoch, value);
+		} else if (source_info_value(
+			       line_value, "pkgver", value, sizeof(value)))
+			strcpy(pkgver, value);
+		else if (source_info_value(
+			     line_value, "pkgrel", value, sizeof(value)))
+			if (strlen(value) >= sizeof(pkgrel))
+				return -1;
+			else
+				strcpy(pkgrel, value);
+		else if (source_info_value(
+			     line_value, "pkgname", value, sizeof(value))) {
+			strcpy(package, value);
+			if (!installed_version(installed,
+					       package,
+					       installed_value,
+					       sizeof(installed_value)))
+				goto next_line;
+			if (!pkgver[0] || !pkgrel[0])
+				return -1;
+			if (snprintf(available,
+				     sizeof(available),
+				     "%s%s-%s",
+				     epoch[0] && strcmp(epoch, "0") ? epoch
+								    : "",
+				     epoch[0] && strcmp(epoch, "0") ? ":" : "",
+				     pkgver)
+			    >= (int)sizeof(available))
+				return -1;
+			{
+				size_t available_length = strlen(available);
+
+				if (available_length + 1 + strlen(pkgrel)
+				    >= sizeof(available))
+					return -1;
+				available[available_length] = '-';
+				strcpy(available + available_length + 1,
+				       pkgrel);
+			}
+			{
+				int newer = arch_version_newer(
+				    config, available, installed_value);
+
+				if (newer < 0)
+					return -1;
+				if (newer)
+					found_update = 1;
+			}
 		}
+	next_line:
 		line = end ? end + 1 : line + strlen(line);
 	}
-	return 0;
+	return found_update;
 }
 
 static int custom_build_callback(const char *path,
@@ -268,8 +390,17 @@ static int custom_build_callback(const char *path,
 		context->result = status;
 		return 1;
 	}
-	if (!source_info_matches(source_info, context->installed))
+	status = source_info_has_update(
+	    source_info, context->installed, context->config);
+	if (status < 0) {
+		logmsg(0, "cannot compare package version for %s", path);
+		context->result = EINVAL;
+		return 1;
+	}
+	if (!status) {
+		logmsg(1, "skipping %s; installed package is up to date", path);
 		return 0;
+	}
 	line = strrchr(source_directory, '/');
 	if (!line || !line[1]) {
 		context->result = EINVAL;
@@ -511,7 +642,7 @@ static int run_custom_stage(const config_t *c)
 	if (!pacman)
 		pacman = "pacman";
 	query[0] = (char *)pacman;
-	query[1] = "-Qq";
+	query[1] = "-Q";
 	query[2] = NULL;
 	status = run_capture(
 	    pacman, query, c, 0, NULL, installed, sizeof(installed));

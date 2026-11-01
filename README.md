@@ -49,7 +49,11 @@ Recipes may be nested below the repository root. The worker recursively finds
 `PKGBUILD` files and runs `makepkg --printsrcinfo` in each recipe directory.
 The recipe is selected when at least one package name emitted by its `pkgname`
 entries is already installed on the machine. Split packages are therefore
-supported. Recipes for packages that are not installed are skipped.
+supported. Recipes for packages that are not installed are skipped. For an
+installed package, the generated Arch package version is compared with the
+installed version using `vercmp`; the recipe is not built when no installed
+package would be upgraded. The repository and recipe metadata are still
+consulted because the package version is defined by the current `PKGBUILD`.
 
 All files required by a recipe must be inside its own directory or available
 from the URLs used by the `PKGBUILD`. Relative `source=()` entries are copied
