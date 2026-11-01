@@ -607,6 +607,57 @@ static int run_update(config_t *c, state_t *s)
 	return r;
 }
 
+static int self_test(config_t *c)
+{
+	char *id[] = {"id", "-u", "-n", NULL};
+	char *pacman_version[] = {"pacman", "--version", NULL};
+	char *yay_version[] = {"yay", "--version", NULL};
+	char *makepkg_version[] = {"makepkg", "--version", NULL};
+	char *git_version[] = {"git", "--version", NULL};
+	int failures = 0;
+
+	if (geteuid() != 0) {
+		fprintf(
+		    stderr,
+		    "self-test must be run as root, for example with sudo\n");
+		return 2;
+	}
+	printf("self-test: configuration validation passed\n");
+	printf("self-test: dropping privileges to %s:\n", c->aur_user);
+	if (runprog("id", id, c, 1, NULL)) {
+		fprintf(stderr, "self-test: cannot execute as aur_user\n");
+		failures++;
+	}
+	if (runprog("pacman", pacman_version, c, 0, NULL)) {
+		fprintf(stderr, "self-test: pacman --version failed\n");
+		failures++;
+	}
+	if (runprog("yay", yay_version, c, 1, NULL)) {
+		fprintf(stderr,
+			"self-test: yay --version failed as aur_user\n");
+		failures++;
+	}
+	if (runprog("makepkg", makepkg_version, c, 1, NULL)) {
+		fprintf(stderr,
+			"self-test: makepkg --version failed as aur_user\n");
+		failures++;
+	}
+	if (runprog("git", git_version, c, 1, NULL)) {
+		fprintf(stderr,
+			"self-test: git --version failed as aur_user\n");
+		failures++;
+	}
+	if (failures) {
+		fprintf(stderr,
+			"self-test: %d check(s) failed; no package operation "
+			"was run\n",
+			failures);
+		return 1;
+	}
+	printf("self-test: all execution checks passed\n");
+	return 0;
+}
+
 static time_t midnight(void)
 {
 	time_t now = time(NULL);
@@ -623,14 +674,21 @@ int main(int argc, char **argv)
 {
 	const char *cfgpath = "/etc/pacman-updater.conf";
 	int dry = 0;
-	if (argc > 1 && !strcmp(argv[1], "--dry-run"))
-		dry = 1;
-	else if (argc > 1 && !strcmp(argv[1], "--config") && argc > 2)
-		cfgpath = argv[2];
-	else if (argc > 1 && strcmp(argv[1], "--config")) {
-		fprintf(
-		    stderr, "usage: %s [--dry-run] [--config FILE]\n", argv[0]);
-		return 2;
+	int selftest = 0;
+	for (int i = 1; i < argc; i++) {
+		if (!strcmp(argv[i], "--dry-run"))
+			dry = 1;
+		else if (!strcmp(argv[i], "--self-test"))
+			selftest = 1;
+		else if (!strcmp(argv[i], "--config") && i + 1 < argc)
+			cfgpath = argv[++i];
+		else {
+			fprintf(stderr,
+				"usage: %s [--dry-run] [--self-test] "
+				"[--config FILE]\n",
+				argv[0]);
+			return 2;
+		}
 	}
 	config_t c;
 	char e[256];
@@ -638,6 +696,8 @@ int main(int argc, char **argv)
 		fprintf(stderr, "configuration invalid: %s\n", e);
 		return 2;
 	}
+	if (selftest)
+		return self_test(&c);
 	verbose = c.verbosity;
 	if (mkdir(c.state_dir, 0700) && errno != EEXIST) {
 		fprintf(stderr,

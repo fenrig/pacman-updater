@@ -180,3 +180,17 @@ error. CPU mode
 uses a quick sample by default so the command returns promptly; use
 `pacman-updater-check --wait-cpu` to wait for the configured CPU averaging
 window and test the same measurement requirement used for eligibility.
+
+To verify the installed execution environment without performing an update,
+run the worker's privileged self-test:
+
+```
+sudo pacman-updater --self-test --config /etc/pacman-updater.conf
+```
+
+The self-test requires root, verifies the configured `aur_user`, drops to that
+user in child processes, and runs harmless `--version` checks for pacman, yay,
+makepkg, and Git. It does not acquire an inhibitor, run package operations,
+change persistent state, or enable systemd services. Exit status 0 means all
+execution checks passed; status 1 means a tool check failed; status 2 means
+configuration or invocation validation failed.
