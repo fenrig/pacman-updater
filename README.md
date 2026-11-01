@@ -181,6 +181,19 @@ uses a quick sample by default so the command returns promptly; use
 `pacman-updater-check --wait-cpu` to wait for the configured CPU averaging
 window and test the same measurement requirement used for eligibility.
 
+For an explicit manual integration test of the real package sequence, use the
+dangerous force flag:
+
+```
+sudo pacman-updater --force-update --config /etc/pacman-updater.conf
+```
+
+This bypasses both the update interval and all eligibility conditions. It does
+not bypass configuration validation, the worker lock, the logind inhibitor,
+or the sequential pacman/yay/custom-package execution. It records the attempt
+and can perform real package upgrades; review the command carefully and do not
+use it as the systemd timer command. It cannot be combined with `--dry-run`.
+
 To verify the installed execution environment without performing an update,
 run the worker's privileged self-test:
 

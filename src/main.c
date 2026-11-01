@@ -675,17 +675,20 @@ int main(int argc, char **argv)
 	const char *cfgpath = "/etc/pacman-updater.conf";
 	int dry = 0;
 	int selftest = 0;
+	int force_update = 0;
 	for (int i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "--dry-run"))
 			dry = 1;
 		else if (!strcmp(argv[i], "--self-test"))
 			selftest = 1;
+		else if (!strcmp(argv[i], "--force-update"))
+			force_update = 1;
 		else if (!strcmp(argv[i], "--config") && i + 1 < argc)
 			cfgpath = argv[++i];
 		else {
 			fprintf(stderr,
 				"usage: %s [--dry-run] [--self-test] "
-				"[--config FILE]\n",
+				"[--force-update] [--config FILE]\n",
 				argv[0]);
 			return 2;
 		}
@@ -696,8 +699,19 @@ int main(int argc, char **argv)
 		fprintf(stderr, "configuration invalid: %s\n", e);
 		return 2;
 	}
+	if (dry && force_update) {
+		fprintf(stderr,
+			"--dry-run and --force-update cannot be combined\n");
+		return 2;
+	}
 	if (selftest)
 		return self_test(&c);
+	if (force_update && geteuid() != 0) {
+		fprintf(stderr,
+			"--force-update must be run as root, for example with "
+			"sudo\n");
+		return 2;
+	}
 	verbose = c.verbosity;
 	if (mkdir(c.state_dir, 0700) && errno != EEXIST) {
 		fprintf(stderr,
@@ -720,11 +734,26 @@ int main(int argc, char **argv)
 		return 2;
 	}
 	time_t now = time(NULL);
+	int due = update_due(&s, now, c.update_interval);
 	logmsg(1,
 	       "update is %s",
-	       update_due(&s, now, c.update_interval) ? "due" : "not due");
-	if (!update_due(&s, now, c.update_interval))
+	       force_update ? "forced" : (due ? "due" : "not due"));
+	if (!force_update && !due)
 		return 0;
+	if (force_update) {
+		logmsg(0,
+		       "WARNING: forcing update; eligibility conditions are "
+		       "being bypassed");
+		s.last_attempt = time(NULL);
+		if (save_state_atomic(statep, &s, e, sizeof e)) {
+			logmsg(0, "could not persist forced attempt: %s", e);
+			return 1;
+		}
+		int rc = run_update(&c, &s);
+		if (save_state_atomic(statep, &s, e, sizeof e))
+			logmsg(0, "could not persist state: %s", e);
+		return rc ? 1 : 0;
+	}
 	if (dry) {
 		char why[256];
 		int ok = conditions_check(&c, why, sizeof why, 0);
