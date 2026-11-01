@@ -8,7 +8,7 @@ waits until seven days after the last complete success, then runs:
 
 ```
 pacman -Syu --noconfirm
-yay -Syu --noconfirm
+yay -Sua --noconfirm
 ```
 
 Only completion of both stages records a success. A failed stage ends the
@@ -106,14 +106,16 @@ Enable the timer only after review; this project does not enable services
 automatically.
 
 The service runs yay as the configured user, with that user’s `HOME`, groups,
-and working directory. `tools/pacman-updater-pacman-wrapper` is a supplied
-root-owned, fixed-path helper that permits only `pacman -U` of absolute regular
-package files. Set yay’s `sudo_bin` to it and allow only that exact executable
-for `aur_user` in sudoers (with `NOPASSWD` if unattended operation is wanted);
-do not grant `NOPASSWD: ALL`. The worker supplies `/dev/null` as stdin and
+and working directory. The root `pacman -Syu` stage updates repository
+packages; the user stage runs `yay -Sua --noconfirm` and updates AUR packages
+only. `tools/pacman-updater-pacman-wrapper` is a supplied root-owned,
+fixed-path helper that permits only `pacman -U` of absolute regular package
+files. Set yay’s `sudo_bin` to it and allow only that exact executable for
+`aur_user` in sudoers (with `NOPASSWD` if unattended operation is wanted); do
+not grant `NOPASSWD: ALL`. The worker supplies `/dev/null` as stdin and
 `--noconfirm`, so a password or other interaction fails instead of waiting for
-a hidden prompt. Verify yay’s effective `sudo`, `sudoflags`, and
-`makepkgconf` settings before enabling the timer.
+a hidden prompt. Verify yay’s effective `sudo`, `sudoflags`, and `makepkgconf`
+settings before enabling the timer.
 
 ## Configuration and safety
 

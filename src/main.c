@@ -576,7 +576,8 @@ static int run_update(config_t *c, state_t *s)
 	char par[32], *ya[8];
 	int j = 0;
 	ya[j++] = (char *)yay;
-	ya[j++] = "-Syu";
+	/* Repository packages were already updated by the root pacman stage. */
+	ya[j++] = "-Sua";
 	ya[j++] = "--noconfirm";
 	if (c->parallelism) {
 		snprintf(par, sizeof par, "-j%d", c->parallelism);
