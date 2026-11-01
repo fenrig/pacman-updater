@@ -333,6 +333,12 @@ static int source_info_has_update(const char *source_info,
 
 				if (newer < 0)
 					return -1;
+				logmsg(1,
+				       "custom package %s: installed %s, "
+				       "repository %s",
+				       package,
+				       installed_value,
+				       available);
 				if (newer)
 					found_update = 1;
 			}
