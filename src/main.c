@@ -363,6 +363,8 @@ static int custom_build_callback(const char *path,
 	char source_directory[PATH_MAX];
 	char build_directory[PATH_MAX];
 	char package_paths[64][PATH_MAX];
+	char *prepare[] = {
+	    "makepkg", "--cleanbuild", "--nobuild", "--nodeps", NULL};
 	char *makepkg_info[] = {"makepkg", "--printsrcinfo", NULL};
 	char *build[] = {"makepkg", "--syncdeps", "--noconfirm", NULL};
 	char *list[] = {"makepkg", "--packagelist", NULL};
@@ -386,6 +388,20 @@ static int custom_build_callback(const char *path,
 	if (!line)
 		return 0;
 	*line = '\0';
+	/*
+	 * VCS PKGBUILDs may calculate pkgver() from the checked-out source.
+	 * Prepare the sources first so the following --printsrcinfo observes
+	 * the current version rather than only the literal pkgver in PKGBUILD.
+	 */
+	status = runprog("makepkg", prepare, context->config, 1, source_directory);
+	if (status) {
+		logmsg(0,
+		       "cannot prepare sources for %s (makepkg status %d)",
+		       path,
+		       status);
+		context->result = status;
+		return 1;
+	}
 	status = run_capture("makepkg",
 			     makepkg_info,
 			     context->config,
