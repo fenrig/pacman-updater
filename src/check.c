@@ -51,6 +51,8 @@ int main(int argc, char **argv)
 	config_t config;
 	state_t state;
 	int wait_for_cpu = 0;
+	int cpu_window_override = 0;
+	const char *cpu_window_value = NULL;
 	int all_passed = 1;
 	int check_error = 0;
 	int due;
@@ -58,17 +60,29 @@ int main(int argc, char **argv)
 	for (int i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "--wait-cpu"))
 			wait_for_cpu = 1;
+		else if (!strcmp(argv[i], "--cpu-window")
+			 && i + 1 < argc) {
+			cpu_window_override = 1;
+			cpu_window_value = argv[++i];
+			wait_for_cpu = 1;
+		}
 		else if (!strcmp(argv[i], "--config") && i + 1 < argc)
 			config_path = argv[++i];
 		else {
 			fprintf(stderr,
-				"usage: %s [--config FILE] [--wait-cpu]\n",
+				"usage: %s [--config FILE] [--wait-cpu] "
+				"[--cpu-window DURATION]\n",
 				argv[0]);
 			return 2;
 		}
 	}
 	if (load_config(config_path, &config, error, sizeof(error))) {
 		fprintf(stderr, "configuration invalid: %s\n", error);
+		return 2;
+	}
+	if (cpu_window_override
+	    && parse_duration(cpu_window_value, &config.cpu_window)) {
+		fprintf(stderr, "invalid CPU window: %s\n", cpu_window_value);
 		return 2;
 	}
 	char state_path[512];
@@ -110,7 +124,8 @@ int main(int argc, char **argv)
 		printf("%-16s disabled\n", "user idle");
 	}
 
-	if (config.idle_mode == IDLE_CPU || config.idle_mode == IDLE_BOTH) {
+	if (wait_for_cpu || cpu_window_override || config.idle_mode == IDLE_CPU
+	    || config.idle_mode == IDLE_BOTH) {
 		int result =
 		    cpu_check(&config, reason, sizeof(reason), wait_for_cpu);
 		if (!check_condition("cpu", result, reason, &check_error))
@@ -118,6 +133,9 @@ int main(int argc, char **argv)
 		if (!wait_for_cpu)
 			printf("  note: CPU used a quick sample; use "
 			       "--wait-cpu for the configured window\n");
+		else if (cpu_window_override)
+			printf("  note: CPU window overridden by command line: %s\n",
+			       cpu_window_value);
 	} else {
 		printf("%-16s disabled\n", "cpu");
 	}

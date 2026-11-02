@@ -188,6 +188,8 @@ error. CPU mode
 uses a quick sample by default so the command returns promptly; use
 `pacman-updater-check --wait-cpu` to wait for the configured CPU averaging
 window and test the same measurement requirement used for eligibility.
+Use `pacman-updater-check --cpu-window 30s` to force a CPU measurement and
+override `cpu_window` for that invocation, even when `idle_mode=user`.
 
 For an explicit manual integration test of the real package sequence, use the
 dangerous force flag:
