@@ -152,9 +152,14 @@ before passing user-idle eligibility. This avoids updating immediately during
 boot; unavailable uptime data postpones. CPU mode samples aggregate
 `/proc/stat` counters over the configured
 window, treats iowait as idle, rejects counter resets, and does not use load
-average. Suspend/resume may make a window unusable and it is retried. `both`
-requires both conditions. CPU mode may make the worker sleep for its averaging
-window before the first decision.
+average. The worker takes one sample per condition check and aggregates those
+samples until the configured `cpu_window` has elapsed. For example,
+`poll_interval=1m` and `cpu_window=5m` produces roughly five one-minute
+intervals in each CPU decision. The first sample does not block; the normal
+poll interval provides the wait. Suspend/resume or a counter reset starts a
+new window. When CPU monitoring is enabled, a `poll_interval` longer than
+`cpu_window` is automatically reduced to `cpu_window`; CPU-disabled modes do
+not change the configured polling interval. `both` requires both conditions.
 
 The worker stops checking at the next local calendar midnight. It never
 inhibits while waiting. Immediately before package operations it acquires a

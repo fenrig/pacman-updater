@@ -339,6 +339,9 @@ int load_config(const char *path, config_t *c, char *e, size_t n)
 			return -1;
 		}
 	}
+	if ((c->idle_mode == IDLE_CPU || c->idle_mode == IDLE_BOTH)
+	    && c->poll_interval > c->cpu_window)
+		c->poll_interval = c->cpu_window;
 	return 0;
 }
 

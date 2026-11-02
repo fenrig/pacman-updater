@@ -1041,17 +1041,19 @@ int main(int argc, char **argv)
 	}
 	if (dry) {
 		char why[256];
-		int ok = conditions_check(&c, why, sizeof why, 0);
+		cpu_monitor_t cpu_monitor = {0};
+		int ok = conditions_check(&c, why, sizeof why, &cpu_monitor, 0);
 		printf(
 		    "dry-run: %s (%s)\n", ok ? "eligible" : "postponed", why);
 		return 0;
 	}
 	time_t end = midnight();
+	cpu_monitor_t cpu_monitor = {0};
 	for (;;) {
 		char why[256];
 		if (time(NULL) >= end)
 			return 0;
-		if (conditions_check(&c, why, sizeof why, 1)) {
+		if (conditions_check(&c, why, sizeof why, &cpu_monitor, 0)) {
 			if (time(NULL) >= end)
 				return 0;
 			logmsg(1, "eligibility passed: %s", why);

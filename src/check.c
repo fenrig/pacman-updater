@@ -56,6 +56,7 @@ int main(int argc, char **argv)
 	int all_passed = 1;
 	int check_error = 0;
 	int due;
+	cpu_monitor_t cpu_monitor = {0};
 
 	for (int i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "--wait-cpu"))
@@ -127,7 +128,11 @@ int main(int argc, char **argv)
 	if (wait_for_cpu || cpu_window_override || config.idle_mode == IDLE_CPU
 	    || config.idle_mode == IDLE_BOTH) {
 		int result =
-		    cpu_check(&config, reason, sizeof(reason), wait_for_cpu);
+		    cpu_check(&config,
+			      reason,
+			      sizeof(reason),
+			      wait_for_cpu ? &cpu_monitor : NULL,
+			      wait_for_cpu);
 		if (!check_condition("cpu", result, reason, &check_error))
 			all_passed = 0;
 		if (!wait_for_cpu)
