@@ -112,6 +112,14 @@ automatically.
 The installer also installs Bash completions for `pacman-updater` and
 `pacman-updater-check` under `/usr/share/bash-completion/completions/`.
 
+By default, a timer invocation exits until `update_interval` has elapsed since
+the last successful update. Set `wait_until_due=1` to keep the worker running
+when the update becomes due within the next 24 hours. It then sleeps until the
+due time only when that occurs before the next `pacman-updater.timer`
+invocation; otherwise it exits immediately so the scheduled invocation can
+take over. Eligibility conditions are tested only after the interval has
+elapsed.
+
 The service runs yay as the configured user, with that user’s `HOME`, groups,
 and working directory. The root `pacman -Syu` stage updates repository
 packages; the user stage runs `yay -Sua --noconfirm` and updates AUR packages

@@ -42,6 +42,8 @@ static void print_config(const config_t *config)
 	       (long long)config->update_interval);
 	printf("  poll_interval:        %llds\n",
 	       (long long)config->poll_interval);
+	printf("  wait_until_due:       %s\n",
+	       config->wait_until_due ? "yes" : "no");
 	printf("  idle_mode:            %s\n",
 	       idle_mode_name(config->idle_mode));
 	printf("  idle_required:        %llds\n",

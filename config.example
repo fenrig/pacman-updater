@@ -1,6 +1,8 @@
 # /etc/pacman-updater.conf (root-owned, mode 0644; one key=value per line)
 update_interval=7d
 poll_interval=5m
+# When enabled, remain running during the final day before an update is due.
+wait_until_due=0
 idle_mode=user
 idle_required=30m
 cpu_window=5m

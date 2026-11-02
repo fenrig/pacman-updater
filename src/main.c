@@ -101,6 +101,49 @@ static void notify_user(const char *summary, const char *body)
 	free(sessions);
 }
 
+static int next_timer_invocation(time_t *when)
+{
+	sd_bus *bus = NULL;
+	sd_bus_message *reply = NULL;
+	const char *unit_path;
+	uint64_t usec;
+	int r;
+
+	r = sd_bus_open_system(&bus);
+	if (r < 0)
+		return -1;
+	r = sd_bus_call_method(bus,
+			       "org.freedesktop.systemd1",
+			       "/org/freedesktop/systemd1",
+			       "org.freedesktop.systemd1.Manager",
+			       "GetUnit",
+			       NULL,
+			       &reply,
+			       "s",
+			       "pacman-updater.timer");
+	if (r < 0 || sd_bus_message_read(reply, "o", &unit_path) < 0)
+		goto fail;
+	r = sd_bus_get_property_trivial(bus,
+					"org.freedesktop.systemd1",
+					unit_path,
+					"org.freedesktop.systemd1.Timer",
+					"NextElapseUSecRealtime",
+					NULL,
+					't',
+					&usec);
+	if (r < 0 || usec == UINT64_MAX)
+		goto fail;
+	*when = (time_t)(usec / 1000000ULL);
+	sd_bus_message_unref(reply);
+	sd_bus_unref(bus);
+	return 0;
+
+fail:
+	sd_bus_message_unref(reply);
+	sd_bus_unref(bus);
+	return -1;
+}
+
 static int inhibit(sd_bus **bp, int *fdp)
 {
 	int r = sd_bus_open_system(bp);
@@ -1023,8 +1066,49 @@ int main(int argc, char **argv)
 	logmsg(1,
 	       "update is %s",
 	       force_update ? "forced" : (due ? "due" : "not due"));
-	if (!force_update && !due)
-		return 0;
+	if (!force_update && !due) {
+		int64_t remaining = c.update_interval
+				    - (int64_t)(now - s.last_success);
+
+		if (!c.wait_until_due || remaining >= 86400)
+			return 0;
+		logmsg(1,
+		       "update is due within %lld seconds; waiting for due time",
+		       (long long)remaining);
+		for (;;) {
+			now = time(NULL);
+			if (update_due(&s, now, c.update_interval)) {
+				due = 1;
+				logmsg(1, "update interval elapsed; checking eligibility");
+				break;
+			}
+			remaining = c.update_interval
+				    - (int64_t)(now - s.last_success);
+			time_t next_timer;
+			unsigned sleepsec;
+			time_t due_at = now + (time_t)remaining;
+
+			if (next_timer_invocation(&next_timer)) {
+				logmsg(0,
+				       "cannot determine next timer invocation; exiting "
+				       "before update is due");
+				return 0;
+			}
+			if (next_timer <= due_at) {
+				logmsg(1,
+				       "next timer invocation precedes update due time; "
+				       "exiting");
+				return 0;
+			}
+			logmsg(1,
+			       "update not due; sleeping until due in %lld seconds",
+			       (long long)remaining);
+			sleepsec = (unsigned)remaining;
+			if (!sleepsec)
+				sleepsec = 1;
+			sleep(sleepsec);
+		}
+	}
 	if (force_update) {
 		logmsg(0,
 		       "WARNING: forcing update; eligibility conditions are "

@@ -55,6 +55,7 @@ void defaults(config_t *c)
 	memset(c, 0, sizeof(*c));
 	c->update_interval = 604800;
 	c->poll_interval = 300;
+	c->wait_until_due = false;
 	c->idle_mode = IDLE_USER;
 	c->idle_required = 1800;
 	c->cpu_window = 300;
@@ -141,6 +142,13 @@ static int setval(config_t *c, const char *k, const char *v, char *e, size_t n)
 		DUR(update_interval);
 	else if (!strcmp(k, "poll_interval"))
 		DUR(poll_interval);
+	else if (!strcmp(k, "wait_until_due")) {
+		if (strcmp(v, "0") && strcmp(v, "1")) {
+			err(e, n, "wait_until_due must be 0 or 1");
+			return -1;
+		}
+		c->wait_until_due = !strcmp(v, "1");
+	}
 	else if (!strcmp(k, "idle_required"))
 		DUR(idle_required);
 	else if (!strcmp(k, "cpu_window"))

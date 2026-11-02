@@ -19,6 +19,7 @@ typedef struct {
 	    no_user_uptime, timeout;
 	int cpu_threshold, battery_external, battery_charging,
 	    battery_discharging;
+	bool wait_until_due;
 	idle_mode_t idle_mode;
 	char aur_user[64], endpoint[512], fallback_endpoint[512];
 	char custom_repo_url[512], custom_repo_ref[128];
