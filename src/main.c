@@ -250,6 +250,57 @@ struct custom_build_context {
 
 static struct custom_build_context *active_custom_context;
 
+static int installed_package(const char *installed, const char *package)
+{
+	const char *line = installed;
+	size_t package_length = strlen(package);
+
+	while (*line) {
+		const char *end = strchr(line, '\n');
+		const char *separator = strchr(line, ' ');
+		size_t line_length = end ? (size_t)(end - line) : strlen(line);
+
+		if (separator && (size_t)(separator - line) == package_length
+		    && (size_t)(separator - line) <= line_length
+		    && !strncmp(line, package, package_length))
+			return 1;
+		line = end ? end + 1 : line + line_length;
+	}
+	return 0;
+}
+
+static int source_info_has_installed_package(const char *source_info,
+					     const char *installed)
+{
+	const char *line = source_info;
+
+	while (*line) {
+		const char *end = strchr(line, '\n');
+		const char *value;
+		size_t length = end ? (size_t)(end - line) : strlen(line);
+
+		while (*line == ' ' || *line == '\t')
+			line++;
+		if (!strncmp(line, "pkgname = ", 10)) {
+			value = line + 10;
+			if (value < line + length
+			    && (size_t)((end ? end : line + strlen(line)) - value)
+				   < 256) {
+				char package[256];
+				size_t package_length =
+				    (size_t)((end ? end : line + strlen(line)) - value);
+
+				memcpy(package, value, package_length);
+				package[package_length] = '\0';
+				if (installed_package(installed, package))
+					return 1;
+			}
+		}
+		line = end ? end + 1 : line + strlen(line);
+	}
+	return 0;
+}
+
 static int arch_version_newer(const config_t *config,
 			      const char *available,
 			      const char *installed)
@@ -387,11 +438,13 @@ static int custom_build_callback(const char *path,
 {
 	struct custom_build_context *context = active_custom_context;
 	char package_list[65536];
+	char source_info[262144];
 	char source_directory[PATH_MAX];
 	char build_directory[PATH_MAX];
 	char package_paths[64][PATH_MAX];
 	char *prepare[] = {
 	    "makepkg", "--cleanbuild", "--nobuild", "--nodeps", NULL};
+	char *makepkg_info[] = {"makepkg", "--printsrcinfo", NULL};
 	char *makepkg_list[] = {"makepkg", "--packagelist", NULL};
 	char *build[] = {"makepkg", "--syncdeps", "--noconfirm", NULL};
 	char *copy[] = {"cp", "-a", "--", NULL, NULL, NULL};
@@ -414,6 +467,34 @@ static int custom_build_callback(const char *path,
 	if (!line)
 		return 0;
 	*line = '\0';
+	status = run_capture("makepkg",
+			     makepkg_info,
+			     context->config,
+			     1,
+			     source_directory,
+			     source_info,
+			     sizeof(source_info));
+	if (status) {
+		logmsg(0,
+		       "cannot inspect %s (makepkg status %d)",
+		       path,
+		       status);
+		context->result = status;
+		return 1;
+	}
+	status = source_info_has_installed_package(
+	    source_info, context->installed);
+	if (status < 0) {
+		logmsg(0, "cannot identify installed packages for %s", path);
+		context->result = EINVAL;
+		return 1;
+	}
+	if (!status) {
+		logmsg(1,
+		       "skipping %s; no output package is installed",
+		       path);
+		return 0;
+	}
 	/*
 	 * VCS PKGBUILDs may calculate pkgver() from the checked-out source.
 	 * Prepare the sources first so the following --packagelist observes
