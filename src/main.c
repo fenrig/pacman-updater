@@ -175,39 +175,6 @@ static int run_capture(const char *path,
 	return 128 + WTERMSIG(status);
 }
 
-static int installed_version(const char *installed,
-			     const char *package,
-			     char *version,
-			     size_t version_size)
-{
-	const char *line = installed;
-	size_t length = strlen(package);
-
-	while (*line) {
-		const char *end = strchr(line, '\n');
-		const char *separator = strchr(line, ' ');
-		size_t line_length = end ? (size_t)(end - line) : strlen(line);
-
-		if (separator && (size_t)(separator - line) == length
-		    && !strncmp(line, package, length)) {
-			const char *value = separator;
-			size_t value_length;
-
-			while (*value == ' ' || *value == '\t')
-				value++;
-			value_length =
-			    end ? (size_t)(end - value) : strlen(value);
-			if (!value_length || value_length >= version_size)
-				return 0;
-			memcpy(version, value, value_length);
-			version[value_length] = '\0';
-			return 1;
-		}
-		line = end ? end + 1 : line + line_length;
-	}
-	return 0;
-}
-
 struct custom_build_context {
 	const config_t *config;
 	const char *build_root;
@@ -216,34 +183,6 @@ struct custom_build_context {
 };
 
 static struct custom_build_context *active_custom_context;
-
-static int source_info_value(const char *line,
-			     const char *key,
-			     char *value,
-			     size_t value_size)
-{
-	size_t key_length = strlen(key);
-	size_t value_length;
-
-	while (*line == ' ' || *line == '\t')
-		line++;
-	if (strncmp(line, key, key_length) || line[key_length] != ' '
-	    || line[key_length + 1] != '=')
-		return 0;
-	line += key_length + 2;
-	while (*line == ' ' || *line == '\t')
-		line++;
-	value_length = strlen(line);
-	while (value_length
-	       && (line[value_length - 1] == '\n'
-		   || line[value_length - 1] == '\r'))
-		value_length--;
-	if (!value_length || value_length >= value_size)
-		return 0;
-	memcpy(value, line, value_length);
-	value[value_length] = '\0';
-	return 1;
-}
 
 static int arch_version_newer(const config_t *config,
 			      const char *available,
@@ -264,14 +203,57 @@ static int arch_version_newer(const config_t *config,
 	return comparison > 0;
 }
 
-static int source_info_has_update(const char *source_info,
-				  const char *installed,
-				  const config_t *config)
+static int package_list_version(const char *package_list,
+				const char *package,
+				char *version,
+				size_t version_size)
 {
-	const char *line = source_info;
-	char epoch[64] = "";
-	char pkgver[256] = "";
-	char pkgrel[64] = "";
+	const char *line = package_list;
+	size_t package_length = strlen(package);
+
+	while (*line) {
+		const char *end = strchr(line, '\n');
+		size_t length = end ? (size_t)(end - line) : strlen(line);
+		char path[PATH_MAX];
+		char *base;
+		char *suffix;
+		char *arch_separator;
+		size_t value_length;
+
+		if (length >= sizeof(path))
+			return -1;
+		memcpy(path, line, length);
+		path[length] = '\0';
+		base = strrchr(path, '/');
+		base = base ? base + 1 : path;
+		if (strncmp(base, package, package_length)
+		    || base[package_length] != '-')
+			goto next_line;
+		suffix = strstr(base, ".pkg.tar.");
+		if (!suffix)
+			goto next_line;
+		arch_separator = suffix;
+		while (arch_separator > base && arch_separator[-1] != '-')
+			arch_separator--;
+		if (arch_separator == base)
+			return -1;
+		value_length = (size_t)(arch_separator - (base + package_length + 1));
+		if (!value_length || value_length >= version_size)
+			return -1;
+		memcpy(version, base + package_length + 1, value_length);
+		version[value_length] = '\0';
+		return 1;
+	next_line:
+		line = end ? end + 1 : line + strlen(line);
+	}
+	return 0;
+}
+
+static int package_list_has_update(const char *package_list,
+				   const char *installed,
+				   const config_t *config)
+{
+	const char *line = installed;
 	int found_update = 0;
 
 	while (*line) {
@@ -279,60 +261,34 @@ static int source_info_has_update(const char *source_info,
 		char package[256];
 		char installed_value[256];
 		char available[384];
-		char line_value[256];
-		char value[256];
 		size_t length = end ? (size_t)(end - line) : strlen(line);
+		size_t installed_length;
+		const char *separator = strchr(line, ' ');
 
-		if (length >= sizeof(line_value))
+		if (!separator || (size_t)(separator - line) >= sizeof(package))
+			goto next_line;
+		if ((size_t)(separator - line) >= length)
 			return -1;
-		memcpy(line_value, line, length);
-		line_value[length] = '\0';
-		if (source_info_value(
-			line_value, "epoch", value, sizeof(value))) {
-			if (strlen(value) >= sizeof(epoch))
-				return -1;
-			strcpy(epoch, value);
-		} else if (source_info_value(
-			       line_value, "pkgver", value, sizeof(value)))
-			strcpy(pkgver, value);
-		else if (source_info_value(
-			     line_value, "pkgrel", value, sizeof(value)))
-			if (strlen(value) >= sizeof(pkgrel))
-				return -1;
-			else
-				strcpy(pkgrel, value);
-		else if (source_info_value(
-			     line_value, "pkgname", value, sizeof(value))) {
-			strcpy(package, value);
-			if (!installed_version(installed,
-					       package,
-					       installed_value,
-					       sizeof(installed_value)))
-				goto next_line;
-			if (!pkgver[0] || !pkgrel[0])
-				return -1;
-			if (snprintf(available,
-				     sizeof(available),
-				     "%s%s-%s",
-				     epoch[0] && strcmp(epoch, "0") ? epoch
-								    : "",
-				     epoch[0] && strcmp(epoch, "0") ? ":" : "",
-				     pkgver)
-			    >= (int)sizeof(available))
-				return -1;
-			{
-				size_t available_length = strlen(available);
+		memcpy(package, line, (size_t)(separator - line));
+		package[separator - line] = '\0';
+		while (*separator == ' ' || *separator == '\t')
+			separator++;
+		if (!*separator || (end && separator >= end))
+			return -1;
+		installed_length = end ? (size_t)(end - separator) : strlen(separator);
+		if (!installed_length || installed_length >= sizeof(installed_value))
+			return -1;
+		memcpy(installed_value, separator, installed_length);
+		installed_value[installed_length] = '\0';
+		{
+			int result = package_list_version(
+				package_list, package, available, sizeof(available));
 
-				if (available_length + 1 + strlen(pkgrel)
-				    >= sizeof(available))
-					return -1;
-				available[available_length] = '-';
-				strcpy(available + available_length + 1,
-				       pkgrel);
-			}
-			{
+			if (result < 0)
+				return -1;
+			if (result) {
 				int newer = arch_version_newer(
-				    config, available, installed_value);
+					config, available, installed_value);
 
 				if (newer < 0)
 					return -1;
@@ -358,16 +314,14 @@ static int custom_build_callback(const char *path,
 				 struct FTW *ftwbuf)
 {
 	struct custom_build_context *context = active_custom_context;
-	char source_info[262144];
 	char package_list[65536];
 	char source_directory[PATH_MAX];
 	char build_directory[PATH_MAX];
 	char package_paths[64][PATH_MAX];
 	char *prepare[] = {
 	    "makepkg", "--cleanbuild", "--nobuild", "--nodeps", NULL};
-	char *makepkg_info[] = {"makepkg", "--printsrcinfo", NULL};
+	char *makepkg_list[] = {"makepkg", "--packagelist", NULL};
 	char *build[] = {"makepkg", "--syncdeps", "--noconfirm", NULL};
-	char *list[] = {"makepkg", "--packagelist", NULL};
 	char *copy[] = {"cp", "-a", "--", NULL, NULL, NULL};
 	const char *pacman;
 	char *install[65];
@@ -390,8 +344,9 @@ static int custom_build_callback(const char *path,
 	*line = '\0';
 	/*
 	 * VCS PKGBUILDs may calculate pkgver() from the checked-out source.
-	 * Prepare the sources first so the following --printsrcinfo observes
-	 * the current version rather than only the literal pkgver in PKGBUILD.
+	 * Prepare the sources first so the following --packagelist observes
+	 * the current pkgver() result rather than only the literal pkgver in
+	 * PKGBUILD.
 	 */
 	status = runprog("makepkg", prepare, context->config, 1, source_directory);
 	if (status) {
@@ -403,20 +358,20 @@ static int custom_build_callback(const char *path,
 		return 1;
 	}
 	status = run_capture("makepkg",
-			     makepkg_info,
+			     makepkg_list,
 			     context->config,
 			     1,
 			     source_directory,
-			     source_info,
-			     sizeof(source_info));
+			     package_list,
+			     sizeof(package_list));
 	if (status) {
 		logmsg(
 		    0, "cannot inspect %s (makepkg status %d)", path, status);
 		context->result = status;
 		return 1;
 	}
-	status = source_info_has_update(
-	    source_info, context->installed, context->config);
+	status = package_list_has_update(
+	    package_list, context->installed, context->config);
 	if (status < 0) {
 		logmsg(0, "cannot compare package version for %s", path);
 		context->result = EINVAL;
@@ -459,7 +414,7 @@ static int custom_build_callback(const char *path,
 		return 1;
 	}
 	status = run_capture("makepkg",
-			     list,
+			     makepkg_list,
 			     context->config,
 			     1,
 			     build_directory,
