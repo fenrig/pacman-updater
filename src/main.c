@@ -295,8 +295,8 @@ static int package_list_version(const char *package_list,
 		if (strncmp(base, package, package_length)
 		    || base[package_length] != '-')
 			goto next_line;
-		suffix = strstr(base, ".pkg.tar.");
-		if (!suffix)
+		suffix = strstr(base, ".pkg.tar");
+		if (!suffix || (suffix[8] != '\0' && suffix[8] != '.'))
 			goto next_line;
 		arch_separator = suffix;
 		while (arch_separator > base && arch_separator[-1] != '-')
@@ -372,6 +372,12 @@ static int package_list_has_update(const char *package_list,
 				       newer ? "update available" : "already current");
 				if (newer)
 					found_update = 1;
+			} else {
+				logmsg(1,
+				       "custom package %s: makepkg returned no "
+				       "matching package filename (output: %s)",
+				       package,
+				       package_list[0] ? package_list : "<empty>");
 			}
 		}
 	next_line:
