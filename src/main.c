@@ -237,7 +237,9 @@ static int package_list_version(const char *package_list,
 			arch_separator--;
 		if (arch_separator == base)
 			return -1;
-		value_length = (size_t)(arch_separator - (base + package_length + 1));
+		/* arch_separator points just after the dash before the arch. */
+		value_length =
+		    (size_t)(arch_separator - 1 - (base + package_length + 1));
 		if (!value_length || value_length >= version_size)
 			return -1;
 		memcpy(version, base + package_length + 1, value_length);
