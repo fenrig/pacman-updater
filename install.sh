@@ -16,6 +16,6 @@ install -Dm644 completions/pacman-updater.bash \
 install -Dm644 config.example /etc/pacman-updater.conf.new
 install -Dm644 systemd/pacman-updater.service /etc/systemd/system/pacman-updater.service
 sed "s|^OnCalendar=.*|OnCalendar=$schedule|" systemd/pacman-updater.timer > /etc/systemd/system/pacman-updater.timer
-install -Dm755 tools/pacman-updater-pacman-wrapper /usr/local/libexec/pacman-updater-pacman-wrapper
+install -Dm755 tools/pacman-updater-pacman-wrapper /usr/lib/pacman-updater/pacman-updater-pacman-wrapper
 install -d -m700 /var/lib/pacman-updater
 echo 'Review /etc/pacman-updater.conf.new, privilege policy, and timer before enabling.'

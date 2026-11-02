@@ -10,6 +10,8 @@
 #include <time.h>
 
 #define PACMAN_UPDATER_SUDO                                                    \
+	"/usr/bin/sudo"
+#define PACMAN_UPDATER_SUDO_WRAPPER                                             \
 	"/usr/lib/pacman-updater/pacman-updater-pacman-wrapper"
 
 int update_run(config_t *c, state_t *s, const char *state_path)
@@ -44,11 +46,13 @@ int update_run(config_t *c, state_t *s, const char *state_path)
 	const char *yay = getenv("PACMAN_UPDATER_YAY");
 	if (!yay)
 		yay = "yay";
-	char par[32], *ya[8];
+	char par[32], *ya[10];
 	int j = 0;
 	ya[j++] = (char *)yay;
 	ya[j++] = "--sudo";
 	ya[j++] = (char *)PACMAN_UPDATER_SUDO;
+	ya[j++] = "--sudoflags";
+	ya[j++] = (char *)PACMAN_UPDATER_SUDO_WRAPPER;
 	/* Repository packages were already updated by the root pacman stage. */
 	ya[j++] = "-Sua";
 	ya[j++] = "--noconfirm";

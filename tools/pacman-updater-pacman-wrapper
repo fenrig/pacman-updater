@@ -1,14 +1,86 @@
 #!/bin/sh
-# Install root-owned (0755) and set yay's sudo_bin to this path. The sudo
-# rule should allow only this exact executable for aur_user.
+# Install root-owned (0755) and pass this path as yay's sudoflags while using
+# /usr/bin/sudo as yay's sudo_bin. The sudo rule should allow only this exact
+# executable for aur_user.
 set -efu
-[ "$#" -ge 2 ] && [ "$1" = -U ] || { echo 'pacman-updater: only pacman -U is permitted' >&2; exit 64; }
-shift
-for pkg do
-    case "$pkg" in
-        --*) echo 'pacman-updater: options are not permitted after -U' >&2; exit 64;;
-        /*) [ -f "$pkg" ] || { echo "pacman-updater: package is not a regular file: $pkg" >&2; exit 66; };;
-        *) echo 'pacman-updater: package path must be absolute' >&2; exit 64;;
-    esac
-done
-exec /usr/bin/pacman -U --noconfirm "$@"
+case "${1-}" in
+    -U)
+        operation=-U
+        shift
+        ;;
+    pacman|/usr/bin/pacman)
+        [ "$#" -ge 2 ] || { echo 'pacman-updater: pacman operation is missing' >&2; exit 64; }
+        operation=$2
+        shift 2
+        ;;
+    *)
+        echo "pacman-updater: unsupported command: ${1-}" >&2
+        exit 64
+        ;;
+esac
+validate_upgrade_args() (
+    packages=0
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --asdeps|--needed|--noconfirm|--) ;;
+            --config)
+                [ "$#" -ge 2 ] && [ "$2" = /etc/pacman.conf ] || {
+                    echo 'pacman-updater: only /etc/pacman.conf is permitted' >&2
+                    exit 64
+                }
+                shift
+                ;;
+            --*) echo "pacman-updater: unsupported option: $1" >&2; exit 64;;
+            /*)
+                [ -f "$1" ] || {
+                    echo "pacman-updater: package is not a regular file: $1" >&2
+                    exit 66
+                }
+                packages=$((packages + 1))
+                ;;
+            *) echo 'pacman-updater: package path must be absolute' >&2; exit 64;;
+        esac
+        shift
+    done
+    [ "$packages" -gt 0 ] || {
+        echo 'pacman-updater: at least one package is required' >&2
+        exit 64
+    }
+)
+validate_database_args() (
+    targets=0
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            -q|--quiet|--asdeps|--asexplicit|--) ;;
+            --config)
+                [ "$#" -ge 2 ] && [ "$2" = /etc/pacman.conf ] || {
+                    echo 'pacman-updater: only /etc/pacman.conf is permitted' >&2
+                    exit 64
+                }
+                shift
+                ;;
+            --*) echo "pacman-updater: unsupported option: $1" >&2; exit 64;;
+            -*) echo "pacman-updater: unsupported option: $1" >&2; exit 64;;
+            *) targets=$((targets + 1));;
+        esac
+        shift
+    done
+    [ "$targets" -gt 0 ] || {
+        echo 'pacman-updater: at least one package is required' >&2
+        exit 64
+    }
+)
+case "$operation" in
+    -U)
+        validate_upgrade_args "$@"
+        exec /usr/bin/pacman -U --noconfirm "$@"
+        ;;
+    -D)
+        validate_database_args "$@"
+        exec /usr/bin/pacman -D "$@"
+        ;;
+    *)
+        echo "pacman-updater: unsupported pacman operation: $operation" >&2
+        exit 64
+        ;;
+esac
