@@ -109,6 +109,9 @@ useradd --create-home --shell /usr/bin/nologin aurbuild
 Enable the timer only after review; this project does not enable services
 automatically.
 
+The installer also installs Bash completions for `pacman-updater` and
+`pacman-updater-check` under `/usr/share/bash-completion/completions/`.
+
 The service runs yay as the configured user, with that user’s `HOME`, groups,
 and working directory. The root `pacman -Syu` stage updates repository
 packages; the user stage runs `yay -Sua --noconfirm` and updates AUR packages

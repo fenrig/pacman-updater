@@ -11,6 +11,8 @@ if [ -r "$config" ]; then
 fi
 install -Dm755 "$build/pacman-updater" /usr/bin/pacman-updater
 install -Dm755 "$build/pacman-updater-check" /usr/bin/pacman-updater-check
+install -Dm644 completions/pacman-updater.bash \
+    /usr/share/bash-completion/completions/pacman-updater
 install -Dm644 config.example /etc/pacman-updater.conf.new
 install -Dm644 systemd/pacman-updater.service /etc/systemd/system/pacman-updater.service
 sed "s|^OnCalendar=.*|OnCalendar=$schedule|" systemd/pacman-updater.timer > /etc/systemd/system/pacman-updater.timer
