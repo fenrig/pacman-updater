@@ -17,6 +17,7 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#include <systemd/sd-login.h>
 
 static int verbose = 1;
 static char state_file[512];
@@ -33,6 +34,71 @@ static void logmsg(int level, const char *fmt, ...)
 	vfprintf(level ? stdout : stderr, fmt, ap);
 	fputc('\n', level ? stdout : stderr);
 	va_end(ap);
+}
+
+static void notify_user(const char *summary, const char *body)
+{
+	char **sessions = NULL;
+	int session_count = sd_get_sessions(&sessions);
+
+	if (session_count < 0)
+		return;
+	for (int i = 0; i < session_count; i++) {
+		uid_t uid;
+		struct passwd *pw;
+		pid_t pid;
+		int status;
+		char runtime_dir[64];
+		char bus_address[128];
+		char *args[] = {"/usr/bin/notify-send",
+				"--app-name=pacman-updater",
+				"--icon=system-software-update",
+				"--urgency=low",
+				"--expire-time=5000",
+				(char *)summary,
+				(char *)body,
+				NULL};
+
+		if (sd_session_is_active(sessions[i]) <= 0
+		    || sd_session_get_uid(sessions[i], &uid) < 0)
+			continue;
+		pw = getpwuid(uid);
+		if (!pw || !pw->pw_dir)
+			continue;
+		if (snprintf(runtime_dir,
+			     sizeof(runtime_dir),
+			     "/run/user/%lu",
+			     (unsigned long)uid)
+		    >= (int)sizeof(runtime_dir)
+		    || snprintf(bus_address,
+				 sizeof(bus_address),
+				 "unix:path=%s/bus",
+				 runtime_dir)
+			       >= (int)sizeof(bus_address))
+			continue;
+		pid = fork();
+		if (pid < 0)
+			continue;
+		if (!pid) {
+			if (initgroups(pw->pw_name, pw->pw_gid)
+			    || setgid(pw->pw_gid) || setuid(uid)
+			    || setenv("HOME", pw->pw_dir, 1)
+			    || setenv("USER", pw->pw_name, 1)
+			    || setenv("LOGNAME", pw->pw_name, 1)
+			    || setenv("XDG_RUNTIME_DIR", runtime_dir, 1)
+			    || setenv("DBUS_SESSION_BUS_ADDRESS", bus_address, 1))
+				_exit(125);
+			if (chdir(pw->pw_dir))
+				_exit(126);
+			execv(args[0], args);
+			_exit(127);
+		}
+		if (waitpid(pid, &status, 0) >= 0)
+			break;
+	}
+	for (int i = 0; i < session_count; i++)
+		free(sessions[i]);
+	free(sessions);
 }
 
 static int inhibit(sd_bus **bp, int *fdp)
@@ -668,6 +734,7 @@ static int run_update(config_t *c, state_t *s)
 		return 1;
 	}
 	logmsg(1, "inhibitor acquired; starting package update");
+	notify_user("Update started", "System and user package updates are running.");
 	const char *pac = getenv("PACMAN_UPDATER_PACMAN");
 	if (!pac)
 		pac = "pacman";
@@ -678,6 +745,7 @@ static int run_update(config_t *c, state_t *s)
 		s->last_result = r;
 		save_state_atomic(state_file, s, (char[128]){0}, 128);
 		logmsg(0, "pacman failed with status %d; yay will not run", r);
+		notify_user("Update failed", "System package update failed; see the journal for details.");
 		close(fd);
 		sd_bus_unref(b);
 		return r;
@@ -717,6 +785,9 @@ static int run_update(config_t *c, state_t *s)
 	if (!r) {
 		s->last_success = time(NULL);
 		logmsg(1, "update completed successfully");
+		notify_user("Update finished", "System and user package updates completed successfully.");
+	} else {
+		notify_user("Update failed", "One or more package update stages failed; see the journal for details.");
 	}
 	close(fd);
 	sd_bus_unref(b);
