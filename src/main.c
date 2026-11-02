@@ -372,12 +372,6 @@ static int package_list_has_update(const char *package_list,
 				       newer ? "update available" : "already current");
 				if (newer)
 					found_update = 1;
-			} else {
-				logmsg(1,
-				       "custom package %s: makepkg returned no "
-				       "matching package filename (output: %s)",
-				       package,
-				       package_list[0] ? package_list : "<empty>");
 			}
 		}
 	next_line:
