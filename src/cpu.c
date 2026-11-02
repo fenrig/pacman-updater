@@ -3,52 +3,20 @@
 #include "cpu.h"
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
 
-struct cpu_counters {
-	uint64_t user;
-	uint64_t nice;
-	uint64_t system;
-	uint64_t idle;
-	uint64_t iowait;
-	uint64_t irq;
-	uint64_t softirq;
-	uint64_t steal;
-};
-
-static void monitor_store(cpu_monitor_t *monitor,
-			  const struct cpu_counters *sample,
-			  const struct timespec *sampled_at)
+void cpu_monitor_destroy(cpu_monitor_t *monitor)
 {
-	monitor->user = sample->user;
-	monitor->nice = sample->nice;
-	monitor->system = sample->system;
-	monitor->idle = sample->idle;
-	monitor->iowait = sample->iowait;
-	monitor->irq = sample->irq;
-	monitor->softirq = sample->softirq;
-	monitor->steal = sample->steal;
-	monitor->sampled_at = *sampled_at;
-	monitor->sample_count = 1;
-	monitor->initialized = 1;
+	if (!monitor)
+		return;
+	free(monitor->samples);
+	memset(monitor, 0, sizeof *monitor);
 }
 
-static void monitor_sample(const cpu_monitor_t *monitor,
-			   struct cpu_counters *sample)
-{
-	sample->user = monitor->user;
-	sample->nice = monitor->nice;
-	sample->system = monitor->system;
-	sample->idle = monitor->idle;
-	sample->iowait = monitor->iowait;
-	sample->irq = monitor->irq;
-	sample->softirq = monitor->softirq;
-	sample->steal = monitor->steal;
-}
-
-static int cpu_sample(struct cpu_counters *sample)
+static int cpu_read(cpu_sample_t *sample)
 {
 	FILE *file = fopen("/proc/stat", "r");
 	char line[256];
@@ -87,6 +55,13 @@ static int cpu_sample(struct cpu_counters *sample)
 	return -1;
 }
 
+static int cpu_sample(cpu_sample_t *sample)
+{
+	if (clock_gettime(CLOCK_MONOTONIC, &sample->sampled_at))
+		return -1;
+	return cpu_read(sample);
+}
+
 static int cpu_wait(int64_t seconds)
 {
 	struct timespec duration = {
@@ -101,10 +76,19 @@ static int cpu_wait(int64_t seconds)
 	return 0;
 }
 
-static int cpu_delta(const struct cpu_counters *before,
-			     const struct cpu_counters *after,
-			     uint64_t *busy,
-			     uint64_t *total)
+static double sample_elapsed(const cpu_sample_t *before,
+			     const cpu_sample_t *after)
+{
+	return (double)(after->sampled_at.tv_sec - before->sampled_at.tv_sec)
+	       + (double)(after->sampled_at.tv_nsec
+			   - before->sampled_at.tv_nsec)
+		 / 1000000000.0;
+}
+
+static int cpu_delta(const cpu_sample_t *before,
+		     const cpu_sample_t *after,
+		     uint64_t *busy,
+		     uint64_t *total)
 {
 	uint64_t user, nice, system, idle, iowait, irq, softirq, steal;
 
@@ -129,101 +113,59 @@ static int cpu_delta(const struct cpu_counters *before,
 	return *total ? 0 : -1;
 }
 
-int cpu_check(const config_t *config,
-	      char *reason,
-	      size_t reason_size,
-	      cpu_monitor_t *monitor,
-	      int wait_for_window)
+static int monitor_append(cpu_monitor_t *monitor, const cpu_sample_t *sample)
 {
-	struct cpu_counters sample1, sample2;
-	struct timespec started, sampled_at;
-	uint64_t busy, total;
-	double elapsed;
-	int continuous = monitor != NULL;
-	cpu_monitor_t one_shot = {0};
+	if (monitor->count == monitor->capacity) {
+		size_t capacity = monitor->capacity ? monitor->capacity * 2 : 8;
+		cpu_sample_t *samples = realloc(monitor->samples,
+						capacity * sizeof *samples);
 
-	if (!monitor)
-		monitor = &one_shot;
-	if (clock_gettime(CLOCK_MONOTONIC, &started)) {
-		snprintf(reason, reason_size, "cannot read monotonic clock");
-		return 0;
+		if (!samples)
+			return -1;
+		monitor->samples = samples;
+		monitor->capacity = capacity;
 	}
-	sampled_at = started;
-	if (!monitor->initialized) {
-		if (cpu_sample(&sample1)) {
-			snprintf(reason, reason_size, "cannot read /proc/stat");
-			return 0;
-		}
-		if (!continuous || wait_for_window) {
-			if (wait_for_window) {
-				snprintf(reason,
-					 reason_size,
-					 "waiting for a %lld-second CPU measurement window",
-					 (long long)config->cpu_window);
-				if (cpu_wait(config->cpu_window)) {
-					snprintf(reason,
-						 reason_size,
-						 "CPU measurement wait failed");
-					return 0;
-				}
-			}
-		} else {
-			monitor_store(monitor, &sample1, &started);
-			snprintf(reason,
-				 reason_size,
-				 "collecting CPU sample 1 for a %lld-second window",
-				 (long long)config->cpu_window);
-			return 0;
-		}
-	} else {
-		monitor_sample(monitor, &sample1);
+	monitor->samples[monitor->count++] = *sample;
+	return 0;
+}
+
+static void monitor_prune(cpu_monitor_t *monitor, int64_t window)
+{
+	while (monitor->count > 1
+	       && sample_elapsed(&monitor->samples[1],
+				 &monitor->samples[monitor->count - 1])
+		      >= (double)window) {
+		memmove(monitor->samples,
+			monitor->samples + 1,
+			(monitor->count - 1) * sizeof *monitor->samples);
+		monitor->count--;
 	}
-	if (cpu_sample(&sample2) || cpu_delta(&sample1, &sample2, &busy, &total)) {
-		monitor->initialized = 0;
-		monitor->sample_count = 0;
-		snprintf(
-		    reason, reason_size, "CPU counters unavailable or reset");
-		return 0;
-	}
-	if (clock_gettime(CLOCK_MONOTONIC, &sampled_at)) {
-		snprintf(reason, reason_size, "cannot read monotonic clock");
-		return 0;
-	}
-	if (monitor->initialized) {
-		elapsed = (double)(sampled_at.tv_sec - monitor->sampled_at.tv_sec)
-			  + (double)(sampled_at.tv_nsec
-				      - monitor->sampled_at.tv_nsec)
-				/ 1000000000.0;
-	} else {
-		elapsed = (double)(sampled_at.tv_sec - started.tv_sec)
-			  + (double)(sampled_at.tv_nsec - started.tv_nsec)
-				/ 1000000000.0;
-	}
-	if (continuous && !wait_for_window && elapsed < (double)config->cpu_window) {
-		monitor->sample_count++;
+}
+
+static int cpu_result(const config_t *config,
+		      const cpu_sample_t *before,
+		      const cpu_sample_t *after,
+		      char *reason,
+		      size_t reason_size)
+{
+	uint64_t busy, total;
+	double elapsed = sample_elapsed(before, after);
+	double utilisation;
+
+	if (elapsed <= 0.0 || cpu_delta(before, after, &busy, &total)) {
 		snprintf(reason,
 			 reason_size,
-			 "collecting CPU sample %u for a %lld-second window "
-			 "(%.1f seconds elapsed)",
-			 monitor->sample_count,
-			 (long long)config->cpu_window,
-			 elapsed);
+			 "CPU counters unavailable, reset, or measurement window invalid");
 		return 0;
 	}
-	monitor_store(monitor, &sample2, &sampled_at);
-	if (elapsed <= 0.0) {
-		snprintf(reason, reason_size, "CPU measurement window is invalid");
-		return 0;
-	}
-	double utilisation = cpu_utilisation(busy, total);
-
+	utilisation = cpu_utilisation(busy, total);
 	if (utilisation > (double)config->cpu_threshold) {
 		snprintf(reason,
 			 reason_size,
-			  "aggregate CPU utilisation %.1f%% over %.1f seconds exceeds "
-			  "%.1f%%",
+			 "aggregate CPU utilisation %.1f%% over %.1f seconds exceeds "
+			 "%.1f%%",
 			 utilisation,
-			  elapsed,
+			 elapsed,
 			 (double)config->cpu_threshold);
 		return 0;
 	}
@@ -233,4 +175,80 @@ int cpu_check(const config_t *config,
 		 utilisation,
 		 elapsed);
 	return 1;
+}
+
+int cpu_check(const config_t *config,
+	      char *reason,
+	      size_t reason_size,
+	      cpu_monitor_t *monitor,
+	      int wait_for_window)
+{
+	cpu_monitor_t one_shot = {0};
+	cpu_sample_t sample;
+	int continuous = monitor != NULL;
+
+	if (!monitor)
+		monitor = &one_shot;
+	if (cpu_sample(&sample)) {
+		snprintf(reason,
+			 reason_size,
+			 "cannot read CPU counters or monotonic clock");
+		return 0;
+	}
+	if (!continuous) {
+		cpu_sample_t before = sample;
+
+		if (wait_for_window) {
+			snprintf(reason,
+				 reason_size,
+				 "waiting for a %lld-second CPU measurement window",
+				 (long long)config->cpu_window);
+			if (cpu_wait(config->cpu_window)) {
+				snprintf(reason,
+					 reason_size,
+					 "CPU measurement wait failed");
+				return 0;
+			}
+		}
+		if (cpu_sample(&sample)) {
+			snprintf(reason,
+				 reason_size,
+				 "cannot read CPU counters or monotonic clock");
+			return 0;
+		}
+		return cpu_result(config, &before, &sample, reason, reason_size);
+	}
+
+	if (monitor_append(monitor, &sample)) {
+		snprintf(reason, reason_size, "cannot retain CPU sample");
+		return 0;
+	}
+	if (monitor->count > 1
+	    && cpu_delta(&monitor->samples[monitor->count - 2],
+			 &monitor->samples[monitor->count - 1],
+			 &(uint64_t){0},
+			 &(uint64_t){0})) {
+		cpu_monitor_destroy(monitor);
+		snprintf(reason, reason_size, "CPU counters reset; restarting window");
+		return 0;
+	}
+	monitor_prune(monitor, config->cpu_window);
+	if (sample_elapsed(&monitor->samples[0],
+			   &monitor->samples[monitor->count - 1])
+	    < (double)config->cpu_window) {
+		snprintf(reason,
+			 reason_size,
+			 "collecting CPU sample %zu for a %lld-second rolling window "
+			 "(%.1f seconds elapsed)",
+			 monitor->count,
+			 (long long)config->cpu_window,
+			 sample_elapsed(&monitor->samples[0],
+					&monitor->samples[monitor->count - 1]));
+		return 0;
+	}
+	return cpu_result(config,
+			  &monitor->samples[0],
+			  &monitor->samples[monitor->count - 1],
+			  reason,
+			  reason_size);
 }

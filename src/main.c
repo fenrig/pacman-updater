@@ -1045,23 +1045,29 @@ int main(int argc, char **argv)
 		int ok = conditions_check(&c, why, sizeof why, &cpu_monitor, 0);
 		printf(
 		    "dry-run: %s (%s)\n", ok ? "eligible" : "postponed", why);
+		cpu_monitor_destroy(&cpu_monitor);
 		return 0;
 	}
 	time_t end = midnight();
 	cpu_monitor_t cpu_monitor = {0};
 	for (;;) {
 		char why[256];
-		if (time(NULL) >= end)
+		if (time(NULL) >= end) {
+			cpu_monitor_destroy(&cpu_monitor);
 			return 0;
+		}
 		if (conditions_check(&c, why, sizeof why, &cpu_monitor, 0)) {
-			if (time(NULL) >= end)
+			if (time(NULL) >= end) {
+				cpu_monitor_destroy(&cpu_monitor);
 				return 0;
+			}
 			logmsg(1, "eligibility passed: %s", why);
 			s.last_attempt = time(NULL);
 			save_state_atomic(statep, &s, e, sizeof e);
 			int rc = run_update(&c, &s);
 			if (save_state_atomic(statep, &s, e, sizeof e))
 				logmsg(0, "could not persist state: %s", e);
+			cpu_monitor_destroy(&cpu_monitor);
 			return rc ? 1 : 0;
 		}
 		logmsg(1, "postponed: %s; retrying before local midnight", why);

@@ -13,9 +13,15 @@ typedef struct {
 	uint64_t softirq;
 	uint64_t steal;
 	struct timespec sampled_at;
-	unsigned sample_count;
-	int initialized;
+} cpu_sample_t;
+
+typedef struct {
+	cpu_sample_t *samples;
+	size_t count;
+	size_t capacity;
 } cpu_monitor_t;
+
+void cpu_monitor_destroy(cpu_monitor_t *monitor);
 
 int cpu_check(const config_t *config,
 	      char *reason,
