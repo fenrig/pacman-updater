@@ -168,8 +168,7 @@ int main(int argc, char **argv)
 			all_passed = 0;
 	}
 
-	if (config.idle_mode == IDLE_USER || config.idle_mode == IDLE_BOTH
-	    || config.idle_mode == IDLE_EITHER) {
+	if (idle_mode_uses_user(config.idle_mode)) {
 		int result = idle_check(&config, reason, sizeof(reason));
 		if (!check_condition("user idle", result, reason, &check_error))
 			all_passed = 0;
@@ -177,9 +176,8 @@ int main(int argc, char **argv)
 		printf("%-16s disabled\n", "user idle");
 	}
 
-	if (wait_for_cpu || cpu_window_override || config.idle_mode == IDLE_CPU
-	    || config.idle_mode == IDLE_BOTH
-	    || config.idle_mode == IDLE_EITHER) {
+	if (wait_for_cpu || cpu_window_override
+	    || idle_mode_uses_cpu(config.idle_mode)) {
 		int result =
 		    cpu_check(&config,
 			      reason,

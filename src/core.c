@@ -85,6 +85,16 @@ double cpu_utilisation(uint64_t b, uint64_t t)
 	return t ? 100.0 * (double)b / (double)t : 0.0;
 }
 
+bool idle_mode_uses_user(idle_mode_t mode)
+{
+	return mode == IDLE_USER || mode == IDLE_BOTH || mode == IDLE_EITHER;
+}
+
+bool idle_mode_uses_cpu(idle_mode_t mode)
+{
+	return mode == IDLE_CPU || mode == IDLE_BOTH || mode == IDLE_EITHER;
+}
+
 bool battery_eligible(const battery_info_t *b,
 		      const config_t *c,
 		      char *why,
@@ -343,15 +353,13 @@ int load_config(const char *path, config_t *c, char *e, size_t n)
 			return -1;
 		}
 	}
-	if (c->idle_mode == IDLE_USER || c->idle_mode == IDLE_BOTH
-	    || c->idle_mode == IDLE_EITHER) {
+	if (idle_mode_uses_user(c->idle_mode)) {
 		if (c->idle_required <= 0) {
 			err(e, n, "idle_required must be positive");
 			return -1;
 		}
 	}
-	if ((c->idle_mode == IDLE_CPU || c->idle_mode == IDLE_BOTH
-	     || c->idle_mode == IDLE_EITHER)
+	if (idle_mode_uses_cpu(c->idle_mode)
 	    && c->poll_interval > c->cpu_window)
 		c->poll_interval = c->cpu_window;
 	return 0;

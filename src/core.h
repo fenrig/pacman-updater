@@ -47,5 +47,7 @@ int load_config(const char *, config_t *, char *, size_t);
 int load_state(const char *, state_t *, char *, size_t);
 int save_state_atomic(const char *, const state_t *, char *, size_t);
 void defaults(config_t *);
+bool idle_mode_uses_user(idle_mode_t);
+bool idle_mode_uses_cpu(idle_mode_t);
 
 #endif

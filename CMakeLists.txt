@@ -15,7 +15,13 @@ add_library(updater_core STATIC
 	src/connectivity.c)
 target_include_directories(updater_core PUBLIC src)
 target_link_libraries(updater_core PUBLIC PkgConfig::SYSTEMD PkgConfig::CURL)
-add_executable(pacman-updater src/main.c)
+add_executable(pacman-updater
+	src/main.c
+	src/custom.c
+	src/logging.c
+	src/process.c
+	src/systemd.c
+	src/update.c)
 target_link_libraries(pacman-updater PRIVATE updater_core)
 add_executable(pacman-updater-check src/check.c)
 target_link_libraries(pacman-updater-check PRIVATE updater_core)
