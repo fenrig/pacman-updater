@@ -572,11 +572,17 @@ static int custom_tmp_dir(const config_t *c, char *directory, size_t size)
 	if (!pw)
 		return -1;
 	result = mkdtemp(template);
-	if (!result || strlen(result) >= size)
+	if (!result)
 		return -1;
+	if (strlen(result) >= size) {
+		rmdir(result);
+		return -1;
+	}
 	strcpy(directory, result);
-	if (chown(directory, pw->pw_uid, pw->pw_gid))
+	if (chown(directory, pw->pw_uid, pw->pw_gid)) {
+		rmdir(directory);
 		return -1;
+	}
 	return 0;
 }
 
@@ -661,11 +667,12 @@ static int run_custom_stage(const config_t *c)
 {
 	char temporary_directory[PATH_MAX];
 	char repository_directory[PATH_MAX];
-	char build_root[PATH_MAX];
+	char build_root[PATH_MAX] = "";
 	char installed[262144];
 	const char *pacman;
 	char *query[3];
 	struct custom_build_context context;
+	int build_root_ready = 0;
 	int status;
 
 	if (!c->custom_repo_url[0])
@@ -684,6 +691,7 @@ static int run_custom_stage(const config_t *c)
 		status = ENAMETOOLONG;
 		goto cleanup;
 	}
+	build_root_ready = 1;
 	status = update_custom_repository(c, repository_directory);
 	if (status) {
 		logmsg(
@@ -720,6 +728,11 @@ static int run_custom_stage(const config_t *c)
 cleanup:
 	{
 		char *remove[] = {"rm", "-rf", "--", temporary_directory, NULL};
+		char *remove_build[] = {"rm", "-rf", "--", build_root, NULL};
+
+		if (build_root_ready
+		    && runprog("/usr/bin/rm", remove_build, c, 1, NULL))
+			logmsg(0, "could not remove custom build workspace");
 
 		if (runprog("/usr/bin/rm", remove, c, 0, NULL))
 			logmsg(0, "could not remove temporary custom checkout");
