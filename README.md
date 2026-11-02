@@ -170,7 +170,8 @@ intervals in each CPU decision. The first sample does not block; the normal
 poll interval provides the wait. Suspend/resume or a counter reset starts a
 new window. When CPU monitoring is enabled, a `poll_interval` longer than
 `cpu_window` is automatically reduced to `cpu_window`; CPU-disabled modes do
-not change the configured polling interval. `both` requires both conditions.
+not change the configured polling interval. `both` requires both conditions;
+`either` requires at least one of user-idle or CPU eligibility to pass.
 
 The worker stops checking at the next local calendar midnight. It never
 inhibits while waiting. Immediately before package operations it acquires a

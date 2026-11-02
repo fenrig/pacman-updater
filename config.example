@@ -3,6 +3,7 @@ update_interval=7d
 poll_interval=5m
 # When enabled, remain running during the final day before an update is due.
 wait_until_due=0
+# user, cpu, both, or either (user idle OR low CPU)
 idle_mode=user
 idle_required=30m
 cpu_window=5m

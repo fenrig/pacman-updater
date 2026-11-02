@@ -164,8 +164,10 @@ static int setval(config_t *c, const char *k, const char *v, char *e, size_t n)
 			c->idle_mode = IDLE_CPU;
 		else if (!strcmp(v, "both"))
 			c->idle_mode = IDLE_BOTH;
+		else if (!strcmp(v, "either"))
+			c->idle_mode = IDLE_EITHER;
 		else {
-			err(e, n, "idle_mode must be user, cpu, or both");
+			err(e, n, "idle_mode must be user, cpu, both, or either");
 			return -1;
 		}
 	} else if (!strcmp(k, "aur_user")) {
@@ -341,13 +343,15 @@ int load_config(const char *path, config_t *c, char *e, size_t n)
 			return -1;
 		}
 	}
-	if (c->idle_mode == IDLE_USER || c->idle_mode == IDLE_BOTH) {
+	if (c->idle_mode == IDLE_USER || c->idle_mode == IDLE_BOTH
+	    || c->idle_mode == IDLE_EITHER) {
 		if (c->idle_required <= 0) {
 			err(e, n, "idle_required must be positive");
 			return -1;
 		}
 	}
-	if ((c->idle_mode == IDLE_CPU || c->idle_mode == IDLE_BOTH)
+	if ((c->idle_mode == IDLE_CPU || c->idle_mode == IDLE_BOTH
+	     || c->idle_mode == IDLE_EITHER)
 	    && c->poll_interval > c->cpu_window)
 		c->poll_interval = c->cpu_window;
 	return 0;

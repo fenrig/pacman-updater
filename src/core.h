@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <time.h>
 
-typedef enum { IDLE_USER, IDLE_CPU, IDLE_BOTH } idle_mode_t;
+typedef enum { IDLE_USER, IDLE_CPU, IDLE_BOTH, IDLE_EITHER } idle_mode_t;
 
 typedef enum {
 	POWER_UNKNOWN,

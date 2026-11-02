@@ -31,6 +31,8 @@ static const char *idle_mode_name(idle_mode_t mode)
 		return "cpu";
 	case IDLE_BOTH:
 		return "both";
+	case IDLE_EITHER:
+		return "either";
 	}
 	return "unknown";
 }
@@ -166,7 +168,8 @@ int main(int argc, char **argv)
 			all_passed = 0;
 	}
 
-	if (config.idle_mode == IDLE_USER || config.idle_mode == IDLE_BOTH) {
+	if (config.idle_mode == IDLE_USER || config.idle_mode == IDLE_BOTH
+	    || config.idle_mode == IDLE_EITHER) {
 		int result = idle_check(&config, reason, sizeof(reason));
 		if (!check_condition("user idle", result, reason, &check_error))
 			all_passed = 0;
@@ -175,7 +178,8 @@ int main(int argc, char **argv)
 	}
 
 	if (wait_for_cpu || cpu_window_override || config.idle_mode == IDLE_CPU
-	    || config.idle_mode == IDLE_BOTH) {
+	    || config.idle_mode == IDLE_BOTH
+	    || config.idle_mode == IDLE_EITHER) {
 		int result =
 		    cpu_check(&config,
 			      reason,
