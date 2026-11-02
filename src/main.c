@@ -355,17 +355,21 @@ static int package_list_has_update(const char *package_list,
 			if (result < 0)
 				return -1;
 			if (result) {
+				logmsg(1,
+				       "custom package %s: installed version %s; "
+				       "version to compile %s",
+				       package,
+				       installed_value,
+				       available);
 				int newer = arch_version_newer(
 					config, available, installed_value);
 
 				if (newer < 0)
 					return -1;
 				logmsg(1,
-				       "custom package %s: installed %s, "
-				       "repository %s",
+				       "custom package %s: comparison result: %s",
 				       package,
-				       installed_value,
-				       available);
+				       newer ? "update available" : "already current");
 				if (newer)
 					found_update = 1;
 			}
