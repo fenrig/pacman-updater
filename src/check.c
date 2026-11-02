@@ -22,6 +22,53 @@ static void print_time(const char *name, int64_t value)
 		printf("%-16s %s\n", name, buffer);
 }
 
+static const char *idle_mode_name(idle_mode_t mode)
+{
+	switch (mode) {
+	case IDLE_USER:
+		return "user";
+	case IDLE_CPU:
+		return "cpu";
+	case IDLE_BOTH:
+		return "both";
+	}
+	return "unknown";
+}
+
+static void print_config(const config_t *config)
+{
+	printf("effective configuration:\n");
+	printf("  update_interval:      %llds\n",
+	       (long long)config->update_interval);
+	printf("  poll_interval:        %llds\n",
+	       (long long)config->poll_interval);
+	printf("  idle_mode:            %s\n",
+	       idle_mode_name(config->idle_mode));
+	printf("  idle_required:        %llds\n",
+	       (long long)config->idle_required);
+	printf("  cpu_window:           %llds\n",
+	       (long long)config->cpu_window);
+	printf("  cpu_threshold:        %d%%\n", config->cpu_threshold);
+	printf("  no_user_uptime:       %llds\n",
+	       (long long)config->no_user_uptime);
+	printf("  battery_external:     %d%%\n", config->battery_external);
+	printf("  battery_charging:     %d%%\n", config->battery_charging);
+	printf("  battery_discharging:  %d%%\n",
+	       config->battery_discharging);
+	printf("  timeout:               %llds\n",
+	       (long long)config->timeout);
+	printf("  aur_user:              %s\n", config->aur_user);
+	printf("  endpoint:              %s\n", config->endpoint);
+	printf("  fallback_endpoint:     %s\n", config->fallback_endpoint);
+	printf("  custom_repo_url:       %s\n",
+	       *config->custom_repo_url ? config->custom_repo_url : "disabled");
+	printf("  custom_repo_ref:       %s\n", config->custom_repo_ref);
+	printf("  timer_calendar:        %s\n", config->timer_calendar);
+	printf("  state_dir:             %s\n", config->state_dir);
+	printf("  parallelism:           %d\n", config->parallelism);
+	printf("  verbosity:              %d\n", config->verbosity);
+}
+
 static int condition_unavailable(const char *reason)
 {
 	return strstr(reason, "unavailable") || strstr(reason, "cannot read")
@@ -99,6 +146,7 @@ int main(int argc, char **argv)
 
 	due = update_due(&state, time(NULL), config.update_interval);
 	printf("configuration: %s\n", config_path);
+	print_config(&config);
 	printf("state:         %s\n", state_path);
 	printf("update due:    %s\n", due ? "yes" : "no");
 	print_time("last success", state.last_success);
