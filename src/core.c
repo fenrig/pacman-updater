@@ -55,7 +55,7 @@ void defaults(config_t *c)
 	memset(c, 0, sizeof(*c));
 	c->update_interval = 604800;
 	c->poll_interval = 300;
-	c->wait_until_due = false;
+	c->wait_until_due = true;
 	c->idle_mode = IDLE_USER;
 	c->idle_required = 1800;
 	c->cpu_window = 300;
