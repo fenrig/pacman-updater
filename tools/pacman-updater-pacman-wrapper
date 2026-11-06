@@ -22,7 +22,14 @@ validate_upgrade_args() (
     packages=0
     while [ "$#" -gt 0 ]; do
         case "$1" in
-            --asdeps|--needed|--noconfirm|--) ;;
+            -d|-dd|-p|-pp|-v|-w|--asdeps|--asexplicit|--needed|--noconfirm|--confirm|--nodeps|--dbonly|--noprogressbar|--noscriptlet|--print|--downloadonly|--disable-download-timeout|--disable-sandbox|--disable-sandbox-filesystem|--disable-sandbox-syscalls|--) ;;
+            --assume-installed|--ignore|--ignoregroup|--overwrite|--print-format|--color)
+                [ "$#" -ge 2 ] && [ -n "$2" ] || {
+                    echo "pacman-updater: option requires an argument: $1" >&2
+                    exit 64
+                }
+                shift
+                ;;
             --config)
                 [ "$#" -ge 2 ] && [ "$2" = /etc/pacman.conf ] || {
                     echo 'pacman-updater: only /etc/pacman.conf is permitted' >&2
@@ -51,7 +58,14 @@ validate_database_args() (
     targets=0
     while [ "$#" -gt 0 ]; do
         case "$1" in
-            -q|--quiet|--asdeps|--asexplicit|--) ;;
+            -q|-v|--quiet|--verbose|--noconfirm|--confirm|--debug|--asdeps|--asexplicit|--check|--) ;;
+            --color)
+                [ "$#" -ge 2 ] && [ "$2" = always -o "$2" = auto -o "$2" = never ] || {
+                    echo 'pacman-updater: color must be always, auto, or never' >&2
+                    exit 64
+                }
+                shift
+                ;;
             --config)
                 [ "$#" -ge 2 ] && [ "$2" = /etc/pacman.conf ] || {
                     echo 'pacman-updater: only /etc/pacman.conf is permitted' >&2
