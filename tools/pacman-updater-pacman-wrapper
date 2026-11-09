@@ -3,19 +3,26 @@
 # /usr/bin/sudo as yay's sudo_bin. The sudo rule should allow only this exact
 # executable for aur_user.
 set -efu
+invocation=$*
+reject() {
+    status=$1
+    shift
+    printf 'pacman-updater: rejected command: %s\n' "$invocation" >&2
+    printf 'pacman-updater: %s\n' "$*" >&2
+    exit "$status"
+}
 case "${1-}" in
-    -U)
-        operation=-U
+    -U|--upgrade|-D|--database)
+        operation=$1
         shift
         ;;
     pacman|/usr/bin/pacman)
-        [ "$#" -ge 2 ] || { echo 'pacman-updater: pacman operation is missing' >&2; exit 64; }
+        [ "$#" -ge 2 ] || reject 64 'pacman operation is missing'
         operation=$2
         shift 2
         ;;
     *)
-        echo "pacman-updater: unsupported command: ${1-}" >&2
-        exit 64
+        reject 64 "unsupported command: ${1-}"
         ;;
 esac
 validate_upgrade_args() (
@@ -25,33 +32,29 @@ validate_upgrade_args() (
             -d|-dd|-p|-pp|-v|-w|--asdeps|--asexplicit|--needed|--noconfirm|--confirm|--nodeps|--dbonly|--noprogressbar|--noscriptlet|--print|--downloadonly|--disable-download-timeout|--disable-sandbox|--disable-sandbox-filesystem|--disable-sandbox-syscalls|--) ;;
             --assume-installed|--ignore|--ignoregroup|--overwrite|--print-format|--color)
                 [ "$#" -ge 2 ] && [ -n "$2" ] || {
-                    echo "pacman-updater: option requires an argument: $1" >&2
-                    exit 64
+                    reject 64 "option requires an argument: $1"
                 }
                 shift
                 ;;
             --config)
                 [ "$#" -ge 2 ] && [ "$2" = /etc/pacman.conf ] || {
-                    echo 'pacman-updater: only /etc/pacman.conf is permitted' >&2
-                    exit 64
+                    reject 64 'only /etc/pacman.conf is permitted'
                 }
                 shift
                 ;;
-            --*) echo "pacman-updater: unsupported option: $1" >&2; exit 64;;
+            --*) reject 64 "unsupported option: $1";;
             /*)
                 [ -f "$1" ] || {
-                    echo "pacman-updater: package is not a regular file: $1" >&2
-                    exit 66
+                    reject 66 "package is not a regular file: $1"
                 }
                 packages=$((packages + 1))
                 ;;
-            *) echo 'pacman-updater: package path must be absolute' >&2; exit 64;;
+            *) reject 64 'package path must be absolute';;
         esac
         shift
     done
     [ "$packages" -gt 0 ] || {
-        echo 'pacman-updater: at least one package is required' >&2
-        exit 64
+        reject 64 'at least one package is required'
     }
 )
 validate_database_args() (
@@ -61,40 +64,36 @@ validate_database_args() (
             -q|-v|--quiet|--verbose|--noconfirm|--confirm|--debug|--asdeps|--asexplicit|--check|--) ;;
             --color)
                 [ "$#" -ge 2 ] && [ "$2" = always -o "$2" = auto -o "$2" = never ] || {
-                    echo 'pacman-updater: color must be always, auto, or never' >&2
-                    exit 64
+                    reject 64 'color must be always, auto, or never'
                 }
                 shift
                 ;;
             --config)
                 [ "$#" -ge 2 ] && [ "$2" = /etc/pacman.conf ] || {
-                    echo 'pacman-updater: only /etc/pacman.conf is permitted' >&2
-                    exit 64
+                    reject 64 'only /etc/pacman.conf is permitted'
                 }
                 shift
                 ;;
-            --*) echo "pacman-updater: unsupported option: $1" >&2; exit 64;;
-            -*) echo "pacman-updater: unsupported option: $1" >&2; exit 64;;
+            --*) reject 64 "unsupported option: $1";;
+            -*) reject 64 "unsupported option: $1";;
             *) targets=$((targets + 1));;
         esac
         shift
     done
     [ "$targets" -gt 0 ] || {
-        echo 'pacman-updater: at least one package is required' >&2
-        exit 64
+        reject 64 'at least one package is required'
     }
 )
 case "$operation" in
-    -U)
+    -U|--upgrade)
         validate_upgrade_args "$@"
         exec /usr/bin/pacman -U --noconfirm "$@"
         ;;
-    -D)
+    -D|--database)
         validate_database_args "$@"
         exec /usr/bin/pacman -D "$@"
         ;;
     *)
-        echo "pacman-updater: unsupported pacman operation: $operation" >&2
-        exit 64
+        reject 64 "unsupported pacman operation: $operation"
         ;;
 esac
