@@ -12,7 +12,7 @@ reject() {
     exit "$status"
 }
 case "${1-}" in
-    -U|--upgrade|-D|--database)
+    -U|--upgrade|-D|--database|-S|--sync|-Sc|-Scc)
         operation=$1
         shift
         ;;
@@ -84,6 +84,37 @@ validate_database_args() (
         reject 64 'at least one package is required'
     }
 )
+validate_clean_args() (
+    clean=0
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            -c|-cc|--clean|--noconfirm|--confirm|--debug|--verbose|--quiet|--noprogressbar|--disable-download-timeout|--disable-sandbox|--disable-sandbox-filesystem|--disable-sandbox-syscalls|--)
+                case "$1" in
+                    -c|-cc|--clean) clean=1;;
+                esac
+                ;;
+            --color)
+                [ "$#" -ge 2 ] && [ "$2" = always -o "$2" = auto -o "$2" = never ] || {
+                    reject 64 'color must be always, auto, or never'
+                }
+                shift
+                ;;
+            --config)
+                [ "$#" -ge 2 ] && [ "$2" = /etc/pacman.conf ] || {
+                    reject 64 'only /etc/pacman.conf is permitted'
+                }
+                shift
+                ;;
+            --*) reject 64 "unsupported option: $1";;
+            -*) reject 64 "unsupported option: $1";;
+            *) reject 64 'clean operation does not accept targets';;
+        esac
+        shift
+    done
+    [ "$clean" -eq 1 ] || {
+        reject 64 'clean operation is required'
+    }
+)
 case "$operation" in
     -U|--upgrade)
         validate_upgrade_args "$@"
@@ -92,6 +123,17 @@ case "$operation" in
     -D|--database)
         validate_database_args "$@"
         exec /usr/bin/pacman -D "$@"
+        ;;
+    -S|--sync|-Sc|-Scc)
+        case "$operation" in
+            -Sc|-Scc)
+                validate_clean_args -c "$@"
+                ;;
+            *)
+                validate_clean_args "$@"
+                ;;
+        esac
+        exec /usr/bin/pacman "$operation" --noconfirm "$@"
         ;;
     *)
         reject 64 "unsupported pacman operation: $operation"
