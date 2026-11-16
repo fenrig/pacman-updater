@@ -123,8 +123,9 @@ The service runs yay as the configured user, with that user’s `HOME`, groups,
 and working directory. The root `pacman -Syu` stage updates repository
 packages; the user stage runs `yay -Sua --noconfirm` and updates AUR packages
 only. `tools/pacman-updater-pacman-wrapper` is a supplied root-owned,
-fixed-path helper that permits only `pacman -U` of absolute regular package
-files, plus the pacman transaction and upgrade flags that yay may forward
+fixed-path helper that permits `pacman -S` repository package installation and
+`pacman -U` of absolute regular package files, plus the pacman transaction and
+upgrade flags that yay may forward
 (`--asdeps`, `--asexplicit`, `--needed`, `--noconfirm`, dependency and
 scriptlet controls, and package-selection filters). It also accepts yay’s
 fixed `--config /etc/pacman.conf --` plumbing and the narrowly scoped

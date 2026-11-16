@@ -84,6 +84,34 @@ validate_database_args() (
         reject 64 'at least one package is required'
     }
 )
+validate_sync_args() (
+    targets=0
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            -d|-dd|-p|-pp|-v|-w|--asdeps|--asexplicit|--needed|--noconfirm|--confirm|--nodeps|--dbonly|--noprogressbar|--noscriptlet|--print|--downloadonly|--disable-download-timeout|--disable-sandbox|--disable-sandbox-filesystem|--disable-sandbox-syscalls|--)
+                ;;
+            --assume-installed|--ignore|--ignoregroup|--overwrite|--print-format|--color)
+                [ "$#" -ge 2 ] && [ -n "$2" ] || {
+                    reject 64 "option requires an argument: $1"
+                }
+                shift
+                ;;
+            --config)
+                [ "$#" -ge 2 ] && [ "$2" = /etc/pacman.conf ] || {
+                    reject 64 'only /etc/pacman.conf is permitted'
+                }
+                shift
+                ;;
+            --*) reject 64 "unsupported option: $1";;
+            -*) reject 64 "unsupported option: $1";;
+            *) targets=$((targets + 1));;
+        esac
+        shift
+    done
+    [ "$targets" -gt 0 ] || {
+        reject 64 'at least one package is required'
+    }
+)
 validate_clean_args() (
     clean=0
     while [ "$#" -gt 0 ]; do
@@ -126,12 +154,8 @@ case "$operation" in
         ;;
     -S|--sync|-Sc|-Scc)
         case "$operation" in
-            -Sc|-Scc)
-                validate_clean_args -c "$@"
-                ;;
-            *)
-                validate_clean_args "$@"
-                ;;
+            -Sc|-Scc) validate_clean_args -c "$@";;
+            *) validate_sync_args "$@";;
         esac
         exec /usr/bin/pacman "$operation" --noconfirm "$@"
         ;;
