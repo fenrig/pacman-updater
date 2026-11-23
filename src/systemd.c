@@ -1,10 +1,13 @@
 #define _GNU_SOURCE
 
+#include "logging.h"
 #include "systemd.h"
 #include <grp.h>
 #include <pwd.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <systemd/sd-login.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -14,8 +17,18 @@ void systemd_notify_user(const char *summary, const char *body)
 	char **sessions = NULL;
 	int session_count = sd_get_sessions(&sessions);
 
-	if (session_count < 0)
+	if (session_count < 0) {
+		logmsg(0,
+		       "cannot enumerate login sessions for notification: %s",
+		       strerror(-session_count));
 		return;
+	}
+	if (session_count == 0) {
+		logmsg(1, "no logged-in users; skipping notification");
+		free(sessions);
+		return;
+	}
+	int active_sessions = 0;
 	for (int i = 0; i < session_count; i++) {
 		uid_t uid;
 		struct passwd *pw;
@@ -35,6 +48,7 @@ void systemd_notify_user(const char *summary, const char *body)
 		if (sd_session_is_active(sessions[i]) <= 0
 		    || sd_session_get_uid(sessions[i], &uid) < 0)
 			continue;
+		active_sessions++;
 		pw = getpwuid(uid);
 		if (!pw || !pw->pw_dir)
 			continue;
@@ -66,9 +80,34 @@ void systemd_notify_user(const char *summary, const char *body)
 			execv(args[0], args);
 			_exit(127);
 		}
-		if (waitpid(pid, &status, 0) >= 0)
-			break;
+		int waited = 0;
+		for (int attempt = 0; attempt < 100; attempt++) {
+			pid_t result = waitpid(pid, &status, WNOHANG);
+			if (result == pid) {
+				waited = 1;
+				break;
+			}
+			if (result < 0)
+				break;
+			usleep(10000);
+		}
+		if (!waited) {
+			(void)kill(pid, SIGTERM);
+			(void)waitpid(pid, &status, 0);
+			logmsg(0,
+			       "notification timed out for session %s",
+			       sessions[i]);
+		} else {
+			if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+				logmsg(0,
+				       "notify-send failed for session %s (status %d)",
+				       sessions[i],
+				       WIFEXITED(status) ? WEXITSTATUS(status) : status);
+		}
+		break;
 	}
+	if (!active_sessions)
+		logmsg(1, "no active user sessions; skipping notification");
 	for (int i = 0; i < session_count; i++)
 		free(sessions[i]);
 	free(sessions);
