@@ -108,6 +108,14 @@ int main(int argc, char **argv)
 	const char *cpu_window_value = NULL;
 	int all_passed = 1;
 	int check_error = 0;
+	int battery_result = 1;
+	int battery_error = 0;
+	int user_result = 1;
+	int user_error = 0;
+	int cpu_result = 1;
+	int cpu_error = 0;
+	int connectivity_result;
+	int connectivity_error = 0;
 	int due;
 
 	for (int i = 1; i < argc; i++) {
@@ -164,30 +172,33 @@ int main(int argc, char **argv)
 	printf("\nconditions (worker order):\n");
 
 	{
-		int result = battery_check(&config, reason, sizeof(reason));
+		battery_result = battery_check(&config, reason, sizeof(reason));
 
-		if (!check_condition("battery", result, reason, &check_error))
-			all_passed = 0;
+		check_condition("battery",
+				battery_result,
+				reason,
+				&battery_error);
 	}
 
 	if (idle_mode_uses_user(config.idle_mode)) {
-		int result = idle_check(&config, reason, sizeof(reason));
-		if (!check_condition("user idle", result, reason, &check_error))
-			all_passed = 0;
+		user_result = idle_check(&config, reason, sizeof(reason));
+		check_condition("user idle",
+				user_result,
+				reason,
+				&user_error);
 	} else {
 		printf("%-16s disabled\n", "user idle");
 	}
 
 	if (wait_for_cpu || cpu_window_override
 	    || idle_mode_uses_cpu(config.idle_mode)) {
-		int result =
+		cpu_result =
 		    cpu_check(&config,
 			      reason,
 			      sizeof(reason),
 			      NULL,
 			      wait_for_cpu);
-		if (!check_condition("cpu", result, reason, &check_error))
-			all_passed = 0;
+		check_condition("cpu", cpu_result, reason, &cpu_error);
 		if (!wait_for_cpu)
 			printf("  note: CPU used a quick sample; use "
 			       "--wait-cpu for the configured window\n");
@@ -198,18 +209,47 @@ int main(int argc, char **argv)
 		printf("%-16s disabled\n", "cpu");
 	}
 
+	int idle_result = 1;
+	int idle_error = 0;
+	switch (config.idle_mode) {
+	case IDLE_USER:
+		idle_result = user_result;
+		idle_error = user_error;
+		break;
+	case IDLE_CPU:
+		idle_result = cpu_result;
+		idle_error = cpu_error;
+		break;
+	case IDLE_BOTH:
+		idle_result = user_result && cpu_result;
+		idle_error = user_error || cpu_error;
+		break;
+	case IDLE_EITHER:
+		idle_result = user_result || cpu_result;
+		idle_error = !idle_result && (user_error || cpu_error);
+		break;
+	}
+	if (!battery_result || !idle_result)
+		all_passed = 0;
+	if (battery_error || idle_error)
+		check_error = 1;
+
 	if (!connectivity_check(&config)) {
 		all_passed = 0;
+		connectivity_result = 0;
 		check_condition("connectivity",
 				0,
 				"HTTPS 204 probe failed (primary and fallback)",
-				&check_error);
+				&connectivity_error);
 	} else {
+		connectivity_result = 1;
 		check_condition("connectivity",
 				1,
 				"HTTPS 204 probe succeeded",
-				&check_error);
+				&connectivity_error);
 	}
+	if (!connectivity_result || connectivity_error)
+		check_error |= connectivity_error;
 
 	printf("\nresult: %s\n",
 	       due && all_passed ? "would start an update"
