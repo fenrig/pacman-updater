@@ -36,36 +36,36 @@ int update_run(config_t *c, state_t *s, const char *state_path)
 	s->last_pacman = time(NULL);
 	if (r) {
 		result = r;
-		logmsg(0, "pacman failed with status %d; yay will not run", r);
+		logmsg(0,
+		       "pacman failed with status %d; continuing with yay and custom stages",
+		       r);
 	}
 	save_state_atomic(state_path, s, (char[128]){0}, 128);
-	if (!r) {
-		const char *yay = getenv("PACMAN_UPDATER_YAY");
-		if (!yay)
-			yay = "yay";
-		char par[32], *ya[10];
-		int j = 0;
-		ya[j++] = (char *)yay;
-		ya[j++] = "--sudo";
-		ya[j++] = (char *)PACMAN_UPDATER_SUDO;
-		ya[j++] = "--sudoflags";
-		ya[j++] = (char *)PACMAN_UPDATER_SUDO_WRAPPER;
-		/* Repository packages were already updated by the root pacman stage. */
-		ya[j++] = "-Sua";
-		ya[j++] = "--noconfirm";
-		if (c->parallelism) {
-			snprintf(par, sizeof par, "-j%d", c->parallelism);
-			ya[j++] = "--mflags";
-			ya[j++] = par;
-		}
-		ya[j] = NULL;
-		r = process_run(yay, ya, c, 1, NULL);
-		s->last_yay = time(NULL);
-		if (r) {
-			if (!result)
-				result = r;
-			logmsg(0, "yay failed with status %d", r);
-		}
+	const char *yay = getenv("PACMAN_UPDATER_YAY");
+	if (!yay)
+		yay = "yay";
+	char par[32], *ya[10];
+	int j = 0;
+	ya[j++] = (char *)yay;
+	ya[j++] = "--sudo";
+	ya[j++] = (char *)PACMAN_UPDATER_SUDO;
+	ya[j++] = "--sudoflags";
+	ya[j++] = (char *)PACMAN_UPDATER_SUDO_WRAPPER;
+	/* Repository packages were already updated by the root pacman stage. */
+	ya[j++] = "-Sua";
+	ya[j++] = "--noconfirm";
+	if (c->parallelism) {
+		snprintf(par, sizeof par, "-j%d", c->parallelism);
+		ya[j++] = "--mflags";
+		ya[j++] = par;
+	}
+	ya[j] = NULL;
+	r = process_run(yay, ya, c, 1, NULL);
+	s->last_yay = time(NULL);
+	if (r) {
+		if (!result)
+			result = r;
+		logmsg(0, "yay failed with status %d", r);
 	}
 	/* Always attempt the custom repository, even if a package stage failed. */
 	r = custom_stage_run(c);
