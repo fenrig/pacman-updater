@@ -13,5 +13,6 @@ void systemd_notify_user(const char *summary, const char *body);
 int systemd_next_timer_invocation(time_t *when);
 int systemd_inhibit(systemd_inhibitor_t *inhibitor);
 void systemd_inhibitor_release(systemd_inhibitor_t *inhibitor);
+int systemd_reboot(void);
 
 #endif

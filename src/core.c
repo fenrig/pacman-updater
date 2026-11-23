@@ -67,6 +67,7 @@ void defaults(config_t *c)
 	c->timeout = 10;
 	c->parallelism = 0;
 	c->verbosity = 1;
+	c->reboot_after_update = false;
 	strcpy(c->endpoint,
 	       "https://connectivitycheck.gstatic.com/generate_204");
 	strcpy(c->fallback_endpoint, "https://www.google.com/generate_204");
@@ -158,6 +159,13 @@ static int setval(config_t *c, const char *k, const char *v, char *e, size_t n)
 			return -1;
 		}
 		c->wait_until_due = !strcmp(v, "1");
+	}
+	else if (!strcmp(k, "reboot_after_update")) {
+		if (strcmp(v, "0") && strcmp(v, "1")) {
+			err(e, n, "reboot_after_update must be 0 or 1");
+			return -1;
+		}
+		c->reboot_after_update = !strcmp(v, "1");
 	}
 	else if (!strcmp(k, "idle_required"))
 		DUR(idle_required);

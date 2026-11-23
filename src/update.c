@@ -93,6 +93,16 @@ int update_run(config_t *c, state_t *s, const char *state_path)
 		    "One or more package update stages failed; see the journal for details.");
 	}
 	systemd_inhibitor_release(&inhibitor);
+	if (!result && c->reboot_after_update) {
+		logmsg(1, "update succeeded; requesting reboot");
+		int reboot_result = systemd_reboot();
+		if (reboot_result < 0) {
+			logmsg(0,
+			       "reboot request failed: %s",
+			       strerror(-reboot_result));
+			return 1;
+		}
+	}
 	return result;
 }
 

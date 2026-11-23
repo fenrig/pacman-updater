@@ -25,6 +25,7 @@ typedef struct {
 	char custom_repo_url[512], custom_repo_ref[128];
 	char timer_calendar[128], state_dir[256];
 	int parallelism, verbosity;
+	bool reboot_after_update;
 } config_t;
 
 typedef struct {

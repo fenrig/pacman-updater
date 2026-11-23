@@ -3,6 +3,8 @@ update_interval=7d
 poll_interval=5m
 # Remain running during the final day before an update is due.
 wait_until_due=1
+# Reboot only after all update stages complete successfully.
+reboot_after_update=0
 # user, cpu, both, or either (user idle OR low CPU)
 idle_mode=user
 idle_required=30m

@@ -205,3 +205,26 @@ void systemd_inhibitor_release(systemd_inhibitor_t *inhibitor)
 		inhibitor->bus = NULL;
 	}
 }
+
+int systemd_reboot(void)
+{
+	sd_bus *bus = NULL;
+	sd_bus_message *reply = NULL;
+	int r;
+
+	r = sd_bus_open_system(&bus);
+	if (r < 0)
+		return r;
+	r = sd_bus_call_method(bus,
+			       "org.freedesktop.login1",
+			       "/org/freedesktop/login1",
+			       "org.freedesktop.login1.Manager",
+			       "Reboot",
+			       NULL,
+			       &reply,
+			       "b",
+			       1);
+	sd_bus_message_unref(reply);
+	sd_bus_unref(bus);
+	return r;
+}

@@ -11,15 +11,17 @@ pacman -Syu --noconfirm
 yay -Sua --noconfirm
 ```
 
-Only completion of both stages records a success. A failed stage ends the
-invocation and the next timer activation retries the complete sequence.
+Only completion of all stages records a success. A failed stage is retained
+as the invocation result, but the remaining stages are still attempted; the
+next timer activation retries the complete sequence.
 
 An optional custom-PKGBUILD stage can be enabled with `custom_repo_url`. The
 worker clones that repository as `aur_user`, inspects
 `makepkg --printsrcinfo`, and builds recipes whose output package names match
 installed packages, including split packages. It then installs the built
-artifacts with root pacman. The stage runs only after pacman and yay succeed;
-any build or install failure fails the complete attempt. The repository is
+artifacts with root pacman. The stage runs after pacman and yay, even when
+either package stage fails; any build or install failure fails the complete
+attempt. The repository is
 cloned into a fresh `/tmp` directory for each attempt and removed afterward.
 Only matched recipe directories are copied into the dedicated
 `~/.cache/pacman-updater/` workspace. PKGBUILDs are never executed as
@@ -118,6 +120,11 @@ timer invocation. The worker sleeps until the due time only when that occurs
 before the next `pacman-updater.timer` invocation; otherwise it exits
 immediately so the scheduled invocation can take over. Eligibility conditions
 are tested only after the interval has elapsed.
+
+Set `reboot_after_update=1` to request a reboot after every stage succeeds;
+the default is `0`. The reboot request is made through systemd-logind only
+after update state has been saved and the sleep/shutdown inhibitor has been
+released.
 
 The service runs yay as the configured user, with that user’s `HOME`, groups,
 and working directory. The root `pacman -Syu` stage updates repository
